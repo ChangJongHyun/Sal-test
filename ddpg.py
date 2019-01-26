@@ -47,13 +47,13 @@ class DDPG:
         with tf.variable_scope('network'):
             self.input = self.generate_network()
         with tf.variable_scope('actor'):
-            self.action = self.generate_actor_network(self.state_ph, True)
+            self.action = self.generate_actor_network(self.input, self.state_ph, True)
         with tf.variable_scope('target_actor'):
-            self.target_action = self.generate_actor_network(self.next_state_ph, False)
+            self.target_action = self.generate_actor_network(self.input, self.next_state_ph, False)
         with tf.variable_scope('critic'):
-            self.qvalue = self.generate_critic_network(self.state_ph, self.action, True)
+            self.qvalue = self.generate_critic_network(self.input, self.state_ph, self.action, True)
         with tf.variable_scope('target_critic'):
-            self.target_qvalue = self.generate_critic_network(self.next_state_ph, self.target_action, False)
+            self.target_qvalue = self.generate_critic_network(self.input, self.next_state_ph, self.target_action, False)
 
         self.a_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='actor')
         self.ta_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='target_actor')
@@ -122,7 +122,7 @@ class DDPG:
             inputs=convFlat, cell=rnn_cell, dtype=tf.float32, initial_state=self.state_in, scope='_rnn')
         return tf.reshape(rnn, shape=[-1, h_size])
 
-    def generate_critic_network(self, rnn_out):
+    def generate_critic_network(self, rnn_out, state, action):
         # hidden1 = tf.layers.dense(tf.concat([state, action], axis=1), h_critic, activation=tf.nn.relu,
         #                           trainable=trainable)
         # hidden2 = tf.layers.dense(hidden1, h_critic, activation=tf.nn.relu, trainable=trainable)
@@ -136,7 +136,7 @@ class DDPG:
                                     weights_initializer=normalized_columns_initializer(1.0),
                                     biases_initializer=None)
 
-    def generate_actor_network(self, rnn_out, action_size):
+    def generate_actor_network(self, rnn_out, action_size, state):
         # hidden1 = tf.layers.dense(state, h_actor, activation=tf.nn.relu, trainable=trainable)
         # hidden2 = tf.layers.dense(hidden1, h_actor, activation=tf.nn.relu, trainable=trainable)
         # hidden3 = tf.layers.dense(hidden2, h_actor, activation=tf.nn.relu, trainable=trainable)
