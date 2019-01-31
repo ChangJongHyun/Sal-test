@@ -5,7 +5,7 @@ import csv
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
-
+from dataset import Sal360
 
 def csv_reader(path):
     dataset = []
@@ -56,9 +56,9 @@ train_dir = os.path.join(video_dir, '320x160')
 test_dir = os.path.join(video_dir, '3840x1920')
 scanpath_h = os.path.join('datasets/Scanpaths_H', 'Scanpaths')
 
-gpu_options = tf.GPUOptions(allow_growth=True)
-config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False, gpu_options=gpu_options)
-sess = tf.Session(config=config)
+# gpu_options = tf.GPUOptions(allow_growth=True)
+# config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False, gpu_options=gpu_options)
+# sess = tf.Session(config=config)
 
 image_in = tf.placeholder(dtype=tf.float32, shape=(None, 84, 84, 3))
 batch_size = tf.placeholder(dtype=tf.int32, shape=[])
@@ -67,43 +67,43 @@ h_size = 512
 
 network = generate_network(image_in, batch_size, train_length, h_size)
 
-sess.run(tf.initialize_all_variables())
+# sess.run(tf.global_variables_initializer())
 
-for video, data in zip(os.listdir(train_dir), os.listdir(scanpath_h)):
+dataset = Sal360().read_scanpath_H()
 
+for video, data in zip(os.listdir(train_dir), dataset['train']):
+    # data --> [45, 100, 7]
     cap = cv2.VideoCapture(os.path.join(train_dir, video))
-    view = Viewport(cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    data = csv_reader(os.path.join(scanpath_h, data))[0]
+    width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+    height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
-    idx = 0
-    c_idx = 0
+    view = Viewport(width, height)
+
     tracker = []
-    while True:
-        ret, frame = cap.read()
 
-        if ret:
-            frame = view.get_view(frame)
-            frame = cv2.resize(frame, (84, 84))
-            cv2.imshow("video", frame)
-            # f_dot = cv2.circle(~~)
-            # for dot in tracker:
-            #     print(dot)
-
-            result = sess.run(network, feed_dict={image_in: [frame], batch_size:1, train_length:1})
-            print(np.shape(result))
+    for scan in data:
+        c_idx = 0
+        idx = 0
+        cap = cv2.VideoCapture(os.path.join(train_dir, video))
+        while True:
+            ret, frame = cap.read()
 
             if c_idx < 100 and idx % 5 == 0:
-                width = float(data[c_idx][1]) * cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-                height = float(data[c_idx][2]) * cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-                tracker.append((width, height))
-                view.set_center(np.array([width, height]))
+                w = float(scan[c_idx][2]) * width
+                h = float(scan[c_idx][1]) * height
+                view.set_center(np.array([w, h]))
                 c_idx += 1
-            idx += 1
-        else:
-            break
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+            if ret:
+                frame = view.get_view(frame)
+                frame = cv2.resize(frame, (84, 84))
+                cv2.imshow("video", frame)
+                idx += 1
+            else:
+                break
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
 
     cap.release()
     cv2.destroyAllWindows()

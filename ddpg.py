@@ -122,6 +122,7 @@ class DDPG:
             inputs=convFlat, cell=rnn_cell, dtype=tf.float32, initial_state=self.state_in, scope='_rnn')
         return tf.reshape(rnn, shape=[-1, h_size])
 
+    # value function
     def generate_critic_network(self, rnn_out, state, action):
         # hidden1 = tf.layers.dense(tf.concat([state, action], axis=1), h_critic, activation=tf.nn.relu,
         #                           trainable=trainable)
@@ -136,6 +137,7 @@ class DDPG:
                                     weights_initializer=normalized_columns_initializer(1.0),
                                     biases_initializer=None)
 
+    # policy
     def generate_actor_network(self, rnn_out, action_size, state):
         # hidden1 = tf.layers.dense(state, h_actor, activation=tf.nn.relu, trainable=trainable)
         # hidden2 = tf.layers.dense(hidden1, h_actor, activation=tf.nn.relu, trainable=trainable)
