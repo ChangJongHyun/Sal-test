@@ -6,6 +6,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
 from dataset import Sal360
+from A3C import AC_Network
+
 
 def csv_reader(path):
     dataset = []
@@ -56,9 +58,6 @@ train_dir = os.path.join(video_dir, '320x160')
 test_dir = os.path.join(video_dir, '3840x1920')
 scanpath_h = os.path.join('datasets/Scanpaths_H', 'Scanpaths')
 
-# gpu_options = tf.GPUOptions(allow_growth=True)
-# config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False, gpu_options=gpu_options)
-# sess = tf.Session(config=config)
 
 image_in = tf.placeholder(dtype=tf.float32, shape=(None, 84, 84, 3))
 batch_size = tf.placeholder(dtype=tf.int32, shape=[])
@@ -67,10 +66,16 @@ h_size = 512
 
 network = generate_network(image_in, batch_size, train_length, h_size)
 
-# sess.run(tf.global_variables_initializer())
-
 dataset = Sal360().read_scanpath_H()
 
+a_size = 2
+s_size = 84 * 84 * 3
+
+net = AC_Network(s_size, a_size, scope=None, trainer=True)
+sess = tf.Session()
+
+sess.run(tf.global_variables_initializer())
+state = (np.zeros([1, 256]), np.zeros([1, 256]))  # initial state
 for video, data in zip(os.listdir(train_dir), dataset['train']):
     # data --> [45, 100, 7]
     cap = cv2.VideoCapture(os.path.join(train_dir, video))
@@ -97,7 +102,10 @@ for video, data in zip(os.listdir(train_dir), dataset['train']):
             if ret:
                 frame = view.get_view(frame)
                 frame = cv2.resize(frame, (84, 84))
-                cv2.imshow("video", frame)
+                action = net.get_action(sess, [np.reshape(frame, [84*84*3])], state)
+                # print(np.shape(action))  # 1,2 --> np.reshape(action, [2,])
+                # 참 값을 설정해줘야되.. 왼쪽? 오른쪽? 위쪽? 아래쪽?
+                # cv2.imshow("video", frame)
                 idx += 1
             else:
                 break
@@ -107,3 +115,4 @@ for video, data in zip(os.listdir(train_dir), dataset['train']):
 
     cap.release()
     cv2.destroyAllWindows()
+

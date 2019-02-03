@@ -5,7 +5,6 @@ import numpy as np
 import cv2
 import os
 from custom_env.gym_my_env.envs.viewport import Viewport
-from PIL import Image
 
 delta = np.array([[0, 0], [0, 1], [0, -1], [1, 0], [-1, 0]])
 
