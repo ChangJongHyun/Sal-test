@@ -45,12 +45,12 @@ def generate_network(input, h_size, rnn_cell):
     # We take the output from the final convolutional layer and send it to a recurrent layer.
     # The input must be reshaped into [batch x trace x units] for rnn processing,
     # and then returned to [batch x units] when sent through the upper levles.
-    convFlat = tf.reshape(slim.flatten(conv4), [self.batch_size, self.trainLength, h_size])
+    # convFlat = tf.reshape(slim.flatten(conv4), [self.batch_size, self.trainLength, h_size])
     # rnn_cell = tf.contrib.rnn.BasicLSTMCell(num_units=h_size, state_is_tuple=True)
-    self.state_in = rnn_cell.zero_state(self.batch_size, tf.float32)
-    rnn, self.rnn_state = tf.nn.dynamic_rnn(
-        inputs=convFlat, cell=rnn_cell, dtype=tf.float32, initial_state=self.state_in, scope='_rnn')
-    return tf.reshape(rnn, shape=[-1, h_size])
+    # self.state_in = rnn_cell.zero_state(self.batch_size, tf.float32)
+    # rnn, self.rnn_state = tf.nn.dynamic_rnn(
+    #     inputs=convFlat, cell=rnn_cell, dtype=tf.float32, initial_state=self.state_in, scope='_rnn')
+    # return tf.reshape(rnn, shape=[-1, h_size])
 
 
 def csv_reader(path):

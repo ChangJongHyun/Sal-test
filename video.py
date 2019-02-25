@@ -50,6 +50,7 @@ def generate_network(inputs,batch_size, trainLength, h_size):
     state_in = rnn_cell.zero_state(batch_size, tf.float32)
     rnn, rnn_state = tf.nn.dynamic_rnn(
         inputs=convFlat, cell=rnn_cell, dtype=tf.float32, initial_state=state_in, scope='rnn')
+
     return tf.reshape(rnn, shape=[-1, h_size])
 
 
@@ -102,7 +103,8 @@ for video, data in zip(os.listdir(train_dir), dataset['train']):
             if ret:
                 frame = view.get_view(frame)
                 frame = cv2.resize(frame, (84, 84))
-                action = net.get_action(sess, [np.reshape(frame, [84*84*3])], state)
+                action = net.get_action(sess, [frame], state)
+                print(action)
                 # print(np.shape(action))  # 1,2 --> np.reshape(action, [2,])
                 # 참 값을 설정해줘야되.. 왼쪽? 오른쪽? 위쪽? 아래쪽?
                 # cv2.imshow("video", frame)
@@ -112,7 +114,7 @@ for video, data in zip(os.listdir(train_dir), dataset['train']):
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-
     cap.release()
+
     cv2.destroyAllWindows()
 

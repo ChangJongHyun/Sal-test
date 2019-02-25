@@ -15,9 +15,12 @@ def normalized_columns_initializer(std=1.0):
 
 class AC_Network():
     def __init__(self, s_size, a_size, scope, trainer):
-        self.inputs = tf.placeholder(shape=[None, s_size], dtype=tf.float32)
-        self.imageIn = tf.reshape(self.inputs, shape=[-1, 84, 84, 3])
-        self.conv1 = slim.conv2d(self.imageIn,
+        # self.inputs = tf.placeholder(shape=[None, s_size], dtype=tf.float32)
+        self.input_image = tf.placeholder(shape=[None, 84, 84, 3], dtype=tf.float32)
+        # self.imageIn = tf.reshape(self.inputs, shape=[-1, 84, 84, 3])
+        self.action_min = 0
+        self.action_max = 2
+        self.conv1 = slim.conv2d(self.input_image,
                                  activation_fn=tf.nn.elu,
                                  num_outputs=32,
                                  kernel_size=[8, 8],
@@ -36,15 +39,19 @@ class AC_Network():
         lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(256, reuse=tf.AUTO_REUSE)
         c_init = np.zeros((1, lstm_cell.state_size.c), np.float32)
         h_init = np.zeros((1, lstm_cell.state_size.h), np.float32)
+
         self.state_init = [c_init, h_init]
         c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
         h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
+
         self.state_in = (c_in, h_in)
+
         rnn_in = tf.expand_dims(hidden, [0])
-        step_size = tf.shape(self.imageIn[:1])  # 84 84 3
-        state_in = tf.nn.rnn_cell.LSTMStateTuple(c_in, h_in)
+        # step_size = tf.shape(self.imageIn[:1])  # 84 84 3
+        state_in = tf.nn.rnn_cell.LSTMStateTuple(c_in, h_in) # c --> hidden, h --> output
+
         lstm_outputs, lstm_state = tf.nn.dynamic_rnn(lstm_cell, rnn_in, initial_state=state_in,
-                                                     sequence_length=step_size, time_major=False, scope="A3C")
+                                                     time_major=False, scope="A3C")
         lstm_c, lstm_h = lstm_state
         self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
         rnn_out = tf.reshape(lstm_outputs, [-1, 256])
@@ -67,10 +74,10 @@ class AC_Network():
 
     def get_action(self, sess, inputs, state):
         action = sess.run(self.policy, feed_dict={
-            self.inputs: inputs,
+            self.input_image: inputs,
             self.state_in: state
         })
-        return action
+        return action * (self.action_max - self.action_min) + self.action_min
 
 
 if __name__ == '__main__':
