@@ -11,7 +11,8 @@ class Sal360:
 
     def read_scanpath_H(self):
         data = []
-        for file in os.listdir(self.scanpath_H):
+        print(sorted(os.listdir(self.scanpath_H)))
+        for file in sorted(os.listdir(self.scanpath_H)):
             with open(os.path.join(self.scanpath_H, file)) as f:
                 row = csv.reader(f)
                 data.append(list(row)[1:])

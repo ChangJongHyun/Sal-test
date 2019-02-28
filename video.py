@@ -7,6 +7,7 @@ import tensorflow as tf
 from tensorflow.contrib import slim
 from dataset import Sal360
 from A3C import AC_Network
+import matplotlib.pyplot as plt
 
 
 def csv_reader(path):
@@ -24,7 +25,7 @@ def csv_reader(path):
     return dataset
 
 
-def generate_network(inputs,batch_size, trainLength, h_size):
+def generate_network(inputs, batch_size, trainLength, h_size):
     conv1 = slim.convolution2d(
         inputs=inputs, num_outputs=32,
         kernel_size=[8, 8], stride=[4, 4], padding='VALID',
@@ -59,7 +60,6 @@ train_dir = os.path.join(video_dir, '320x160')
 test_dir = os.path.join(video_dir, '3840x1920')
 scanpath_h = os.path.join('datasets/Scanpaths_H', 'Scanpaths')
 
-
 image_in = tf.placeholder(dtype=tf.float32, shape=(None, 84, 84, 3))
 batch_size = tf.placeholder(dtype=tf.int32, shape=[])
 train_length = tf.placeholder(dtype=tf.int32, shape=[])
@@ -77,7 +77,10 @@ sess = tf.Session()
 
 sess.run(tf.global_variables_initializer())
 state = (np.zeros([1, 256]), np.zeros([1, 256]))  # initial state
-for video, data in zip(os.listdir(train_dir), dataset['train']):
+# TODO state 작성
+
+
+for video, data in zip(sorted(os.listdir(train_dir)), dataset['train']):
     # data --> [45, 100, 7]
     cap = cv2.VideoCapture(os.path.join(train_dir, video))
     width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
@@ -85,26 +88,29 @@ for video, data in zip(os.listdir(train_dir), dataset['train']):
 
     view = Viewport(width, height)
 
-    tracker = []
-
+    print("video name : ", video)
+    loss = []
     for scan in data:
         c_idx = 0
         idx = 0
         cap = cv2.VideoCapture(os.path.join(train_dir, video))
+        print(scan)
         while True:
             ret, frame = cap.read()
-
-            if c_idx < 100 and idx % 5 == 0:
-                w = float(scan[c_idx][2]) * width
-                h = float(scan[c_idx][1]) * height
-                view.set_center(np.array([w, h]))
-                c_idx += 1
 
             if ret:
                 frame = view.get_view(frame)
                 frame = cv2.resize(frame, (84, 84))
-                action = net.get_action(sess, [frame], state)
-                print(action)
+
+                if c_idx < 100 and idx % 5 == 0:
+                    w = float(scan[c_idx][2]) * width
+                    h = float(scan[c_idx][1]) * height
+                    view.set_center(np.array([w, h]))
+                    c_idx += 1
+                    true = np.reshape([w, h], [1, 2])
+                    action, l = net.pre_train(sess, [frame], state, true, c_idx)
+                    print("(pred, true) -> ({}, {}) ", action, (w, h))
+                    loss.append(l)
                 # print(np.shape(action))  # 1,2 --> np.reshape(action, [2,])
                 # 참 값을 설정해줘야되.. 왼쪽? 오른쪽? 위쪽? 아래쪽?
                 # cv2.imshow("video", frame)
@@ -114,7 +120,7 @@ for video, data in zip(os.listdir(train_dir), dataset['train']):
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
+        plt.plot(loss)
     cap.release()
 
     cv2.destroyAllWindows()
-
