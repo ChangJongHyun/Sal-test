@@ -33,7 +33,7 @@ class AC_Network():
                                  stride=[2, 2],
                                  padding='VALID')
         hidden = slim.fully_connected(slim.flatten(self.conv2), 256,
-                                      activation_fn=tf.nn.elu)
+                                      activation_fn=tf.nn.relu)
 
         # temporal dependency
         lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(256, reuse=tf.AUTO_REUSE)
@@ -44,15 +44,15 @@ class AC_Network():
         c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
         h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
 
-        self.state_in = (c_in, h_in)
+        # self.state_in = (c_in, h_in)
 
-        rnn_in = tf.expand_dims(hidden, [0])
+        self.rnn_in = tf.expand_dims(hidden, [0])
         # step_size = tf.shape(self.imageIn[:1])  # 84 84 3
-        state_in = tf.nn.rnn_cell.LSTMStateTuple(c_in, h_in)  # c --> hidden, h --> output
+        self.state_in = tf.nn.rnn_cell.LSTMStateTuple(c_in, h_in)  # c --> hidden, h --> output
 
-        lstm_outputs, lstm_state = tf.nn.dynamic_rnn(lstm_cell, rnn_in, initial_state=state_in,
-                                                     time_major=False, scope="A3C")
-        lstm_c, lstm_h = lstm_state
+        lstm_outputs, self.lstm_state = tf.nn.dynamic_rnn(lstm_cell, self.rnn_in, initial_state=self.state_in,
+                                                          time_major=False, scope="A3C")
+        lstm_c, lstm_h = self.lstm_state
         self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
         rnn_out = tf.reshape(lstm_outputs, [-1, 256])
 
@@ -60,25 +60,32 @@ class AC_Network():
         #                                    activation_fn=tf.nn.relu,
         #                                    weights_initializer=normalized_columns_initializer(0.01),
         #                                    biases_initializer=None)
-
+        #
         hidden1 = tf.layers.dense(rnn_out, 16, activation=tf.nn.relu)
         hidden2 = tf.layers.dense(hidden1, 16, activation=tf.nn.relu)
         hidden3 = tf.layers.dense(hidden2, 16, activation=tf.nn.relu)
 
         self.policy = tf.layers.dense(hidden3, a_size, activation=tf.nn.relu)
+        self.policy = tf.reshape(self.policy, [2, ])
         self.value = slim.fully_connected(rnn_out, 1,
                                           activation_fn=None,
                                           weights_initializer=normalized_columns_initializer(1.0),
                                           biases_initializer=None)
 
-        self.true_val = tf.placeholder(tf.float32, shape=[1, 2])
+        self.true_val = tf.placeholder(tf.float32, shape=[2, ])
+        # self.error = tf.reduce_mean(tf.square(self.true_val - self.policy))
+        # self.train_op = tf.train.AdamOptimizer(0.001)
+
         self.error = tf.reduce_mean(tf.square(tf.subtract(self.true_val, self.policy)))
         self.train_op = tf.train.AdamOptimizer(0.001).minimize(self.error)
+
         self.saver = tf.train.Saver()
 
+    # 프레임 1개와 state를 받고 output (true 값이 움직여야할 위치, policy가 deep neural net으로 이동한 위치)
     def pre_train(self, sess, inputs, state_in, true, step):
         action, _, loss = sess.run([self.policy, self.train_op, self.error], feed_dict={self.input_image: inputs,
-                                                                     self.state_in: state_in, self.true_val: true})
+                                                                   self.state_in: state_in,
+                                                                   self.true_val: true})
         return action, loss
 
     def get_action(self, sess, inputs, state):
@@ -87,6 +94,11 @@ class AC_Network():
             self.state_in: state
         })
         return action * (self.action_max - self.action_min) + self.action_min
+
+    def get_state(self, sess, inputs, state):
+        return sess.run(self.state_out, feed_dict={
+            self.input_image: inputs,
+            self.state_in: state})
 
 
 if __name__ == '__main__':

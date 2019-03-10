@@ -8,6 +8,7 @@ from tensorflow.contrib import slim
 from dataset import Sal360
 from A3C import AC_Network
 import matplotlib.pyplot as plt
+from resnet import Model
 
 
 def csv_reader(path):
@@ -76,7 +77,8 @@ net = AC_Network(s_size, a_size, scope=None, trainer=True)
 sess = tf.Session()
 
 sess.run(tf.global_variables_initializer())
-state = (np.zeros([1, 256]), np.zeros([1, 256]))  # initial state
+
+
 # TODO state 작성
 
 
@@ -94,7 +96,8 @@ for video, data in zip(sorted(os.listdir(train_dir)), dataset['train']):
         c_idx = 0
         idx = 0
         cap = cv2.VideoCapture(os.path.join(train_dir, video))
-        print(scan)
+        state = (np.zeros([1, 256]), np.zeros([1, 256]))  # initial state
+
         while True:
             ret, frame = cap.read()
 
@@ -105,12 +108,20 @@ for video, data in zip(sorted(os.listdir(train_dir)), dataset['train']):
                 if c_idx < 100 and idx % 5 == 0:
                     w = float(scan[c_idx][2]) * width
                     h = float(scan[c_idx][1]) * height
-                    view.set_center(np.array([w, h]))
+                    true = np.array([w, h])
+                    move = (true - view.center)  # 현재 view 위치에서 다음 5프레임 이후 view의 위치 action
                     c_idx += 1
-                    true = np.reshape([w, h], [1, 2])
-                    action, l = net.pre_train(sess, [frame], state, true, c_idx)
-                    print("(pred, true) -> ({}, {}) ", action, (w, h))
-                    loss.append(l)
+
+                    state1 = net.get_state(sess, [frame], state)  # state 업데이트
+                    action, l = net.pre_train(sess, [frame], state, move * 10, c_idx)
+                    # action = net.get_action(sess, [frame], state)
+                    # action, l = net.pre_train(sess, [frame], state, move, c_idx)  # policy를 통해 action과 loss return
+                    state = state1
+
+                    view.move(move)
+                    print("action, true, loss -> {} {} {}".format(action, move, l))
+
+                    # loss.append(l)
                 # print(np.shape(action))  # 1,2 --> np.reshape(action, [2,])
                 # 참 값을 설정해줘야되.. 왼쪽? 오른쪽? 위쪽? 아래쪽?
                 # cv2.imshow("video", frame)
@@ -122,5 +133,11 @@ for video, data in zip(sorted(os.listdir(train_dir)), dataset['train']):
                 break
         plt.plot(loss)
     cap.release()
-
     cv2.destroyAllWindows()
+
+
+def resnet(input_tensor=None):
+    input_shape = (84, 84, 3)  # WHC
+
+    bn_axis = 1
+

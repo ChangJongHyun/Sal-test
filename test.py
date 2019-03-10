@@ -12,6 +12,7 @@ test_dir = os.path.join(video_dir, '3840x1920')
 
 h_size = 512
 
+
 # Policy
 class Actor:
     def __init__(self):
