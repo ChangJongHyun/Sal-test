@@ -2,8 +2,10 @@ import cv2
 import os
 import csv
 import numpy as np
-
+from my_resnet import dcn_resnet
+from dataset import Sal360
 import tensorflow as tf
+from custom_env.gym_my_env.envs.viewport import Viewport
 from tensorflow.contrib import slim
 
 video_dir = 'sample_videos'
@@ -70,12 +72,25 @@ def csv_reader(path):
         print(np.shape(dataset[0]))
     return dataset
 
+# model = dcn_resnet()
 
-for video in os.listdir(train_dir):
-    cap = cv2.VideoCapture(os.path.join(train_dir, video))
+video_dir = 'sample_videos'
+train_dir = os.path.join(video_dir, '320x160')
+test_dir = os.path.join(video_dir, '3840x1920')
+scanpath_h = os.path.join('datasets/Scanpaths_H', 'Scanpaths')
+dataset = Sal360().read_scanpath_H()
 
-    # cellT = tf.contrib.rnn.BasicLSTMCell(num_units=h_size, state_is_tuple=True)
-    # network = generate_network()
+
+for video, data in zip(sorted(os.listdir(test_dir)), dataset['train']):
+    cap = cv2.VideoCapture(os.path.join(test_dir, video))
+    ret, frame = cap.read()
+
+    width, height = cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+
+    Viewport = Viewport(width, height)
+    input_shape = (    Viewport.width, height, 3)
+
+    model = dcn_resnet(input_shape)
     while True:
         ret, frame = cap.read()
 

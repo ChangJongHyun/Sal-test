@@ -9,6 +9,7 @@ from dataset import Sal360
 from A3C import AC_Network
 import matplotlib.pyplot as plt
 from resnet import Model
+from my_resnet import dcn_resnet
 
 
 def csv_reader(path):
@@ -78,24 +79,26 @@ sess = tf.Session()
 
 sess.run(tf.global_variables_initializer())
 
-
 # TODO state 작성
 
+sign_ary = [[0., 0.], [0., 1.], [1., 0.], [1., 1.], [0., -1.], [-1., 0.], [-1., -1.], [-1., 1.], [1., -1.]]
 
-for video, data in zip(sorted(os.listdir(train_dir)), dataset['train']):
+for video, data in zip(sorted(os.listdir(test_dir)), dataset['train']):
     # data --> [45, 100, 7]
-    cap = cv2.VideoCapture(os.path.join(train_dir, video))
+    cap = cv2.VideoCapture(os.path.join(test_dir, video))
     width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
     height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
     view = Viewport(width, height)
+
+    m = dcn_resnet((width, height, 3))
 
     print("video name : ", video)
     loss = []
     for scan in data:
         c_idx = 0
         idx = 0
-        cap = cv2.VideoCapture(os.path.join(train_dir, video))
+        cap = cv2.VideoCapture(os.path.join(test_dir, video))
         state = (np.zeros([1, 256]), np.zeros([1, 256]))  # initial state
 
         while True:
@@ -110,16 +113,21 @@ for video, data in zip(sorted(os.listdir(train_dir)), dataset['train']):
                     h = float(scan[c_idx][1]) * height
                     true = np.array([w, h])
                     move = (true - view.center)  # 현재 view 위치에서 다음 5프레임 이후 view의 위치 action
+
                     c_idx += 1
+                    sign = np.sign(move)
+                    val = np.zeros(9)
+                    val[sign_ary.index(list(sign))] = 1
+                    move_abs = np.abs(move)
 
                     state1 = net.get_state(sess, [frame], state)  # state 업데이트
-                    action, l = net.pre_train(sess, [frame], state, move * 10, c_idx)
+                    action, l = net.pre_train(sess, [frame], state, val, c_idx)
                     # action = net.get_action(sess, [frame], state)
                     # action, l = net.pre_train(sess, [frame], state, move, c_idx)  # policy를 통해 action과 loss return
                     state = state1
 
                     view.move(move)
-                    print("action, true, loss -> {} {} {}".format(action, move, l))
+                    print("action, true, loss -> {} {} {}".format(np.argmax(action), val, l))
 
                     # loss.append(l)
                 # print(np.shape(action))  # 1,2 --> np.reshape(action, [2,])
@@ -140,4 +148,3 @@ def resnet(input_tensor=None):
     input_shape = (84, 84, 3)  # WHC
 
     bn_axis = 1
-

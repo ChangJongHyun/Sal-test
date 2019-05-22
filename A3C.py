@@ -13,6 +13,9 @@ def normalized_columns_initializer(std=1.0):
     return _initializer
 
 
+sign_ary = [[0, 0], [0, 1], [1, 0], [1, 1], [0, -1], [-1, 0], [-1, -1], [-1, 1], [1, -1]]
+
+
 class AC_Network():
     def __init__(self, s_size, a_size, scope, trainer):
         # self.inputs = tf.placeholder(shape=[None, s_size], dtype=tf.float32)
@@ -21,18 +24,27 @@ class AC_Network():
         self.action_min = 0
         self.action_max = 2
         self.conv1 = slim.conv2d(self.input_image,
-                                 activation_fn=tf.nn.elu,
+                                 activation_fn=tf.nn.relu,
                                  num_outputs=32,
                                  kernel_size=[8, 8],
                                  stride=[4, 4],
                                  padding='VALID')
         self.conv2 = slim.conv2d(self.conv1,
-                                 activation_fn=tf.nn.elu,
+                                 activation_fn=tf.nn.relu,
                                  num_outputs=64,
                                  kernel_size=[4, 4],
                                  stride=[2, 2],
                                  padding='VALID')
-        hidden = slim.fully_connected(slim.flatten(self.conv2), 256,
+        self.conv3 = slim.convolution2d(
+            inputs=self.conv2, num_outputs=64,
+            kernel_size=[3, 3], stride=[1, 1], padding='VALID',
+            activation_fn=tf.nn.relu)
+
+        self.conv4 = slim.convolution2d(
+            inputs=self.conv3, num_outputs=256,
+            kernel_size=[7, 7], stride=[1, 1], padding='VALID',
+            activation_fn=tf.nn.relu)
+        hidden = slim.fully_connected(slim.flatten(self.conv4), 256,
                                       activation_fn=tf.nn.relu)
 
         # temporal dependency
@@ -61,31 +73,31 @@ class AC_Network():
         #                                    weights_initializer=normalized_columns_initializer(0.01),
         #                                    biases_initializer=None)
         #
-        hidden1 = tf.layers.dense(rnn_out, 16, activation=tf.nn.relu)
-        hidden2 = tf.layers.dense(hidden1, 16, activation=tf.nn.relu)
-        hidden3 = tf.layers.dense(hidden2, 16, activation=tf.nn.relu)
+        # hidden1 = tf.layers.dense(rnn_out, 16, activation=tf.nn.relu)
+        # hidden2 = tf.layers.dense(hidden1, 16, activation=tf.nn.relu)
+        # hidden3 = tf.layers.dense(hidden2, 16, activation=tf.nn.relu)
 
-        self.policy = tf.layers.dense(hidden3, a_size, activation=tf.nn.relu)
-        self.policy = tf.reshape(self.policy, [2, ])
+        self.policy = tf.layers.dense(rnn_out, 9, activation=tf.nn.relu)
+        self.policy = tf.nn.softmax(self.policy)
         self.value = slim.fully_connected(rnn_out, 1,
                                           activation_fn=None,
                                           weights_initializer=normalized_columns_initializer(1.0),
                                           biases_initializer=None)
 
-        self.true_val = tf.placeholder(tf.float32, shape=[2, ])
+        self.true_val = tf.placeholder(tf.int32, shape=[9])
         # self.error = tf.reduce_mean(tf.square(self.true_val - self.policy))
         # self.train_op = tf.train.AdamOptimizer(0.001)
-
-        self.error = tf.reduce_mean(tf.square(tf.subtract(self.true_val, self.policy)))
-        self.train_op = tf.train.AdamOptimizer(0.001).minimize(self.error)
+        self.error = tf.nn.softmax_cross_entropy_with_logits(labels=self.true_val, logits=self.policy)
+        # self.error = tf.reduce_mean(tf.square(tf.subtract(self.true_val, self.policy)))
+        self.train_op = tf.train.AdamOptimizer(0.01).minimize(self.error)
 
         self.saver = tf.train.Saver()
 
     # 프레임 1개와 state를 받고 output (true 값이 움직여야할 위치, policy가 deep neural net으로 이동한 위치)
     def pre_train(self, sess, inputs, state_in, true, step):
         action, _, loss = sess.run([self.policy, self.train_op, self.error], feed_dict={self.input_image: inputs,
-                                                                   self.state_in: state_in,
-                                                                   self.true_val: true})
+                                                                                        self.state_in: state_in,
+                                                                                        self.true_val: true})
         return action, loss
 
     def get_action(self, sess, inputs, state):
