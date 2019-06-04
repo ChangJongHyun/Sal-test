@@ -1,6 +1,9 @@
 import numpy as np
-import tensorflow as tf
-from tensorflow.contrib import slim
+# import tensorflow as tf
+# from tensorflow.contrib import slim
+from my_resnet import dcn_resnet
+from keras.layers import Input, Dense
+from keras.layers import CuDNNLSTM, LSTMCell, LSTM
 
 
 # Used to initialize weights for policy and value output layers
@@ -16,7 +19,20 @@ def normalized_columns_initializer(std=1.0):
 sign_ary = [[0, 0], [0, 1], [1, 0], [1, 1], [0, -1], [-1, 0], [-1, -1], [-1, 1], [1, -1]]
 
 
-class AC_Network():
+class MyModel:
+    def __init__(self):
+        action_input = Input(shape=[None, 1])
+        state_input = Input(shape=[None, 224, 224, 3])
+        value_dcn = dcn_resnet()
+        policy_dcn = dcn_resnet()  # 변수 공유? 다른 변수?
+        value_lstm = CuDNNLSTM(256)(value_dcn, state_input)  # state-value : expected return
+        policy_lstm = CuDNNLSTM(256)(policy_dcn)  # policy : agent's action selection
+        self.value_model = Dense(1, activation='relu')(value_lstm)
+        self.policy_model = Dense(1, activation='relu')(policy_lstm)
+
+
+
+class AC_Network:
     def __init__(self, s_size, a_size, scope, trainer):
         # self.inputs = tf.placeholder(shape=[None, s_size], dtype=tf.float32)
         self.input_image = tf.placeholder(shape=[None, 84, 84, 3], dtype=tf.float32)
