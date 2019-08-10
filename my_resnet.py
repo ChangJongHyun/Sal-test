@@ -161,7 +161,7 @@ def dcn_resnet(input_tensor=None):
 
     # Create model
     x = keras.layers.Flatten()(x)
-    x = keras.layers.Dense(1000, activation='relu')(x)
+    x = keras.layers.Dense(128, activation='relu')(x)
     x = keras.layers.Dropout(0.5)(x)
     x = keras.layers.Dense(10,
                            activation='softmax',

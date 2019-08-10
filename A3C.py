@@ -1,5 +1,5 @@
 import numpy as np
-# import tensorflow as tf
+import tensorflow as tf
 # from tensorflow.contrib import slim
 from my_resnet import dcn_resnet
 from keras.layers import Input, Dense
@@ -29,7 +29,6 @@ class MyModel:
         policy_lstm = CuDNNLSTM(256)(policy_dcn)  # policy : agent's action selection
         self.value_model = Dense(1, activation='relu')(value_lstm)
         self.policy_model = Dense(1, activation='relu')(policy_lstm)
-
 
 
 class AC_Network:

@@ -5,7 +5,7 @@ import csv
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
-from dataset import Sal360
+from dataset import load_sal360_dataset
 from A3C import AC_Network
 import matplotlib.pyplot as plt
 from resnet import Model
@@ -57,10 +57,10 @@ def generate_network(inputs, batch_size, trainLength, h_size):
     return tf.reshape(rnn, shape=[-1, h_size])
 
 
-video_dir = 'sample_videos'
+video_dir = 'dataset/Stimuli'
 train_dir = os.path.join(video_dir, '320x160')
 test_dir = os.path.join(video_dir, '3840x1920')
-scanpath_h = os.path.join('datasets/Scanpaths_H', 'Scanpaths')
+scanpath_h = os.path.join('dataset/H', 'Scanpaths')
 
 image_in = tf.placeholder(dtype=tf.float32, shape=(None, 84, 84, 3))
 batch_size = tf.placeholder(dtype=tf.int32, shape=[])
@@ -69,7 +69,7 @@ h_size = 512
 
 network = generate_network(image_in, batch_size, train_length, h_size)
 
-dataset = Sal360().read_scanpath_H()
+dataset = load_sal360_dataset()
 
 a_size = 2
 s_size = 84 * 84 * 3
@@ -83,9 +83,9 @@ sess.run(tf.global_variables_initializer())
 
 sign_ary = [[0., 0.], [0., 1.], [1., 0.], [1., 1.], [0., -1.], [-1., 0.], [-1., -1.], [-1., 1.], [1., -1.]]
 
-for video, data in zip(sorted(os.listdir(test_dir)), dataset['train']):
+for video, data in zip(sorted(os.listdir(video_dir)), dataset['train']):
     # data --> [45, 100, 7]
-    cap = cv2.VideoCapture(os.path.join(test_dir, video))
+    cap = cv2.VideoCapture(os.path.join(video_dir, video))
     width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
     height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
@@ -98,7 +98,7 @@ for video, data in zip(sorted(os.listdir(test_dir)), dataset['train']):
     for scan in data:
         c_idx = 0
         idx = 0
-        cap = cv2.VideoCapture(os.path.join(test_dir, video))
+        cap = cv2.VideoCapture(os.path.join(video_dir, video))
         state = (np.zeros([1, 256]), np.zeros([1, 256]))  # initial state
 
         while True:
