@@ -81,7 +81,7 @@ sess.run(tf.global_variables_initializer())
 
 # TODO state 작성
 
-sign_ary = [[0., 0.], [0., 1.], [1., 0.], [1., 1.], [0., -1.], [-1., 0.], [-1., -1.], [-1., 1.], [1., -1.]]
+sign_ary = [[0., 0.], [0., 1.], [1., 0.], [1., 1.], [0., -1.], [-1., 0.], [-1., -1.], [-1., 1.], [1., -1.]] #
 
 for video, data in zip(sorted(os.listdir(video_dir)), dataset['train']):
     # data --> [45, 100, 7]

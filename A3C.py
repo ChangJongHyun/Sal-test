@@ -30,13 +30,6 @@ class MyModel:
         self.value_model = Dense(1, activation='relu')(value_lstm)
         self.policy_model = Dense(1, activation='relu')(policy_lstm)
 
-
-class AC_Network:
-    def __init__(self, s_size, a_size, scope, trainer):
-        # self.inputs = tf.placeholder(shape=[None, s_size], dtype=tf.float32)
-        self.input_image = tf.placeholder(shape=[None, 84, 84, 3], dtype=tf.float32)
-        # self.imageIn = tf.reshape(self.inputs, shape=[-1, 84, 84, 3])
-        self.action_min = 0
         self.action_max = 2
         self.conv1 = slim.conv2d(self.input_image,
                                  activation_fn=tf.nn.relu,
