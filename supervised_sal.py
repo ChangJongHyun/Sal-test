@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import os
 import tempfile
@@ -8,6 +10,10 @@ from custom_env.gym_my_env.envs.viewport import Viewport
 from resnet_tf import ResNet50
 import tensorflow as tf
 import cv2
+from keras import Sequential
+from keras.layers import TimeDistributed, Convolution2D, Flatten, LSTM, Dense
+from keras.optimizers import Adam, rmsprop, SGD
+from keras.losses import KLD
 
 
 # 1. supervided learning cnn + rnn
@@ -49,49 +55,111 @@ def random_batch(batch_size, data_format):
     return images, one_hot
 
 
-if __name__ == '__main__':
-    sign_ary = [[0., 0.], [0., 1.], [1., 0.], [1., 1.], [0., -1.], [-1., 0.], [-1., -1.], [-1., 1.], [1., -1.]]
+def doom_drqn(input_shape):
+    learning_rate = 0.0001
+    action_size = 2
+    model = Sequential()
+    model.add(TimeDistributed(Convolution2D(32, 8, 8, subsample=(4, 4), activation='relu'), input_shape=(input_shape)))
+    model.add(TimeDistributed(Convolution2D(64, 4, 4, subsample=(2, 2), activation='relu')))
+    model.add(TimeDistributed(Convolution2D(64, 3, 3, activation='relu')))
+    model.add(TimeDistributed(Flatten()))
 
-    sal360 = Sal360()
-    train, test = sal360.load_sal360_dataset()
+    # Use all traces for training
+    # model.add(LSTM(512, return_sequences=True,  activation='tanh'))
+    # model.add(TimeDistributed(Dense(output_dim=action_size, activation='linear')))
+
+    # Use last trace for training
+    model.add(LSTM(512, activation='tanh'))
+    model.add(Dense(output_dim=action_size, activation='linear'))
+
+    adam = Adam(lr=learning_rate)
+    model.compile(loss=KLD, optimizer=adam)
+
+    return model
+
+
+def resnet_rcnn(input_shape):
+    pass
+
+
+if __name__ == '__main__':
+    # sign_ary = [[0., 0.], [0., 1.], [1., 0.], [1., 1.], [0., -1.], [-1., 0.], [-1., -1.], [-1., 1.], [1., -1.]]
+
+    data, action = Sal360().load_sal360_dataset()
+    data = data.reshape((19, 57, 100, 7))
+    action = action.reshape((19, 57, 100, 2))
+    _x_train, x_test = data[:15], data[15:]
+    _y_train, y_test = action[:15], action[15:]
+
+    x_train, x_validation = np.array([i[:45] for i in _x_train]), np.array(
+        [i[45:] for i in _x_train])  # 15 45 100 7, 15 12 100 7
+    y_train, y_validation = np.array([i[:45] for i in _y_train]), np.array([i[45:] for i in _y_train])
 
     width = 3840
     height = 1920
-
     data_format = 'channels_last'
 
     view = Viewport(width, height)
-    images = []
-    # model = ResNet50(data_format, include_top=False)
 
-    # end - start 가 6이면 뒤에꺼 1개 프레임 짤라
-    dataX = []
-    # output = model(images, trainable=True)
-    for video, data in zip(sorted(os.listdir('sample_videos/3840x1920/')), dataset):
-        # data --> [57, 100, 7]
-        cap = cv2.VideoCapture(os.path.join('sample_videos/3840x1920/', video))
-        for scan in data:
-            c_idx = 0
-            idx = 0
+    v_width = int(view.width)
+    v_height = int(view.height)
+
+    input_shape = (-1, v_width, v_height, 3)
+    fixed_input_shape = (1, 224, 224, 3)
+
+    model = doom_drqn(fixed_input_shape)
+
+    t_start = time.time()
+    print("start task!")
+
+    for video, _x, _y in zip(sorted(os.listdir(os.path.join('sample_videos', 'train', '3840x1920'))),
+                             x_train, y_train):  # tr: 45, 100, 7
+        cap = cv2.VideoCapture(os.path.join('sample_videos/train/3840x1920/', video))
+        i_start = time.time()
+        print("{} start task!".format(video))
+        for x, y in zip(_x, _y):  # _x : 100, 7 _y : 100, 2
+            x_iter = iter(x)
+            y_iter = iter(y)
+            x_data = next(x_iter)
+            y_data = next(y_iter)
+            frame_idx = x_data[6] - x_data[5] + 1
+            prev_frame = None
+            index = 0
             while True:
                 ret, frame = cap.read()
-
-                if c_idx < 100 and idx % 5 == 0:
-                    w = float(scan[c_idx][2]) * width
-                    h = float(scan[c_idx][1]) * height
-                    view.set_center(np.array([w, h]))
-                    dataX.append(view.center)
-                    c_idx += 1
-
+                inputs = None
                 if ret:
-                    frame = view.get_view(frame)
-                    frame = cv2.resize(frame, (224, 224))
-                    cv2.imshow('test', frame)
-                    idx += 1
-                    print(np.shape(dataX))
+                    index += 1
+                    print(frame_idx)
+                    if index == frame_idx:
+                        w, h = x_data[1] * width, x_data[2] * height
+                        view.set_center(np.array([w, h]))
+                        frame = view.get_view(frame)
+                        frame = cv2.resize(frame, (224, 224))
+                        x_data = next(x_iter)
+                        y_data = next(y_iter)
+                        frame_idx = x_data[6] - x_data[5] + 1
+                        index = 0
+                        print(np.shape(y_data))
+                        model.train_on_batch([frame], y_data)
+                        prev_frame = frame
                 else:
-                    break
+                    print()
+                    model.train_on_batch([prev_frame], y_data)
+
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
             cap.release()
             cv2.destroyAllWindows()
+        i_end = time.time()
+        print("video task take {}s".format(i_end - i_start))
+        # save model
+        model_json = model.to_json()
+        with open(os.path.join("model/supervised/", video, "_model.json"), "w") as json_file:
+            json_file.write(model_json)
+        # save weight
+        model.save_weights(os.path.join("model/supervised/", video, "_model.h5"))
+        print("Saved model to disk")
+    t_end = time.time()
+    print("total task take {}s".format(t_end - t_start))
+

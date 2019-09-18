@@ -144,7 +144,3 @@ for video, data in zip(sorted(os.listdir(video_dir)), dataset['train']):
     cv2.destroyAllWindows()
 
 
-def resnet(input_tensor=None):
-    input_shape = (84, 84, 3)  # WHC
-
-    bn_axis = 1
