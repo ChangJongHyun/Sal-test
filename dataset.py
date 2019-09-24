@@ -19,51 +19,17 @@ class Sal360:
         # self.input_data = self.load_video_dataset()
         pass
 
-    def load_video_dataset(self, resolution='high'):
-        start = time.time()
-        if resolution == 'high':
-            path = os.path.join('sample_videos', '3840x1920')
-        else:
-            path = os.path.join('sample_videos', '320x160')
-        video_data = []
-        for video in os.listdir(path):
-            cap = cv2.VideoCapture(os.path.join(path, video))
-            while True:
-                ret, frame = cap.read()
-
-                if ret:
-                    video_data.append(frame)
-                    cv2.imshow('test', frame)
-                else:
-                    break
-
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
-
-            cap.release()
-            cv2.destroyAllWindows()
-        end = time.time()
-
-        print("X 걸린시간: {}초".format(end - start))
-        print(np.shape(video_data))
-        return video_data
-
     def load_sal360_dataset(self):
-        start = time.time()
         path = os.path.join("dataset", "H", "Scanpaths")
         data = []
+        actions = []
+
         for file in sorted(os.listdir(path)):
             with open(os.path.join(path, file)) as f:
                 row = csv.reader(f)
                 data.append([list(map(lambda x: [float(i) for i in x], list(row)[1:]))])
-        result = []
 
         np_data = np.array(data).reshape((-1, 7))
-        actions = []
-        frames = [i[6] - i[5] for i in np_data]
-
-        state = np.array([(i[1] * 3840, i[2] * 1920) for i in np_data]).reshape([19, 57, 100, 2])
-        state_prob = np.array([(i[1], i[2]) for i in np_data]).reshape([19, 57, 100, 2])
 
         for idx, i in enumerate(np_data):
             if 99 == int(np_data[idx][0]):
@@ -72,14 +38,23 @@ class Sal360:
                 action = (np_data[idx + 1][1] - np_data[idx][1], np_data[idx + 1][2] - np_data[idx][1])
             actions.append(action)
 
-        end = time.time()
-        print("Y 걸린시간: {}초".format(end - start))
+        actions = np.array(actions)
 
-        print(np.shape(np_data))
-        print(np.shape(actions))
-        print(np.shape(frames))
+        np_data = np_data.reshape((19, 57, 100, 7))
+        actions = actions.reshape((19, 57, 100, 2))
 
-        return np_data, np.array(actions)
+        _x_train, x_test = np_data[:15], np_data[15:]
+        _y_train, y_test = actions[:15], actions[15:]
+
+        x_train, x_validation = np.array([i[:45] for i in _x_train]), np.array([i[45:] for i in _x_train])
+        y_train, y_validation = np.array([i[:45] for i in _y_train]), np.array([i[45:] for i in _y_train])
+
+        print("shape : (# of video, # of person, # of data per video, # of data)")
+        print("shape of train set x, y : ", x_train.shape, y_train.shape)
+        print("shape of validation set x, y : ", x_validation.shape, y_validation.shape)
+        print("shape of test set x, y : ", x_test.shape, y_test.shape)
+
+        return (x_train, y_train), (x_validation, x_validation), (x_test, y_test)
 
     def plot_state_data(self, data):
         assert np.shape(data) == 2, 100
@@ -118,17 +93,5 @@ class Sal360:
             print("avg L2 norm : {}".format(min(distance)))
 
 
-def draw_scanpath(fig, x, y, z):
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.set_xlabel('X axis')
-    ax.set_ylabel('Y axis')
-    ax.set_zlabel('Z axis')
-    ax.plot(x, y, z)
-    plt.title('test')
-    plt.show()
-
-
 if __name__ == '__main__':
-    data, action = Sal360().load_sal360_dataset()
-    print(np.shape(action.reshape(-1, 57, 100, 2)))
+    train, val, test = Sal360().load_sal360_dataset()

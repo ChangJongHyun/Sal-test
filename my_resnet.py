@@ -161,11 +161,13 @@ def dcn_resnet(input_tensor=None):
 
     # Create model
     x = keras.layers.Flatten()(x)
-    x = keras.layers.Dense(128, activation='relu')(x)
+    x = keras.layers.Reshape((1, 1, ))
+    x = keras.layers.LSTM(512, activation='tanh')(x)
+    x = keras.layers.Dense(2, activation='linear')(x)
     x = keras.layers.Dropout(0.5)(x)
-    x = keras.layers.Dense(10,
-                           activation='softmax',
-                           name='x_train_out')(x)
+    # x = keras.layers.Dense(10,
+    #                        activation='softmax',
+    #                        name='x_train_out')(x)
 
     model = Model(inputs=img_input, outputs=x)
     # Load weights
