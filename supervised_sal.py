@@ -6,7 +6,7 @@ import tempfile
 import random
 import matplotlib.pyplot as plt
 from my_resnet import dcn_resnet
-from dataset import Sal360
+from dataset import Sal360, data_generator
 from custom_env.gym_my_env.envs.viewport import Viewport
 from resnet_tf import ResNet50
 import tensorflow as tf
@@ -137,7 +137,11 @@ def resnet_rcnn(input_shape):
 if __name__ == '__main__':
     # sign_ary = [[0., 0.], [0., 1.], [1., 0.], [1., 1.], [0., -1.], [-1., 0.], [-1., -1.], [-1., 1.], [1., -1.]]
     total_loss = []
-
+    fps_list = {'01_PortoRiverside.mp4': 25, '02_Diner.mp4': 30, '03_PlanEnergyBioLab.mp4': 25,
+           '04_Ocean.mp4': 30, '05_Waterpark.mp4': 30, '06_DroneFlight.mp4': 25, '07_GazaFishermen.mp4': 25,
+           '08_Sofa.mp4': 24, '09_MattSwift.mp4': 30, '10_Cows.mp4': 24, '11_Abbottsford.mp4': 30,
+           '12_TeatroRegioTorino.mp4': 30, '13_Fountain.mp4': 30, '14_Warship.mp4': 25, '15_Cockpit.mp4': 25,
+           '16_Turtle.mp4': 30, '17_UnderwaterPark.mp4': 30, '18_Bar.mp4': 25, '19_Touvet.mp4': 30}
     train, validation, test = Sal360().load_sal360_dataset()
     width = 3840
     height = 1920
@@ -150,7 +154,7 @@ if __name__ == '__main__':
 
     input_shape = (-1, v_width, v_height, 3)
     fixed_input_shape = (224, 224, 3)
-    trace_length = 4
+    trace_length = None
     state_size = (trace_length, 224, 224, 3)
 
     max_epochs = 10
@@ -166,6 +170,7 @@ if __name__ == '__main__':
                                  train[0], train[1]):  # tr: 45, 100, 7
             i_start = time.time()
             video_per_loss = []
+            trace_length = fps_list[video]
             print("{} start task!".format(video))
             for x, y in zip(_x, _y):  # _x : 100, 7 _y : 100, 2
                 cap = cv2.VideoCapture(os.path.join('sample_videos/train/3840x1920/', video))
@@ -206,6 +211,8 @@ if __name__ == '__main__':
                             if len(sequenceX) == trace_length:
                                 batchX.append(sequenceX)
                                 batchY.append(sequenceY)
+                                print(np.shape(sequenceX))
+                                print(np.shape(sequenceY))
                                 sequenceX = []
                                 sequenceY = []
 
@@ -224,9 +231,9 @@ if __name__ == '__main__':
                         break
 
                 print('batch x, y : {}, {}'.format(np.shape(batchX), np.shape(batchY)))
-                loss = model.train_on_batch([batchX], [batchY])
-                video_per_loss.append(loss)
-                print("loss: ", loss)
+                # loss = model.train_on_batch([batchX], [batchY])
+                # video_per_loss.append(loss)
+                # print("loss: ", loss)
 
                 cap.release()
                 cv2.destroyAllWindows()
@@ -240,7 +247,7 @@ if __name__ == '__main__':
             # plt.ylabel('loss')
             # plt.show()
 
-            epochs_per_loss.append(sum(video_per_loss) / len(video_per_loss))
+            # epochs_per_loss.append(sum(video_per_loss) / len(video_per_loss))
 
             print("video task take {}s".format(i_end - i_start))
             inner_path = os.path.join("model/supervised", video)
