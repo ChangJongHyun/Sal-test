@@ -137,138 +137,16 @@ def resnet_rcnn(input_shape):
 if __name__ == '__main__':
     # sign_ary = [[0., 0.], [0., 1.], [1., 0.], [1., 1.], [0., -1.], [-1., 0.], [-1., -1.], [-1., 1.], [1., -1.]]
     total_loss = []
-    fps_list = {'01_PortoRiverside.mp4': 25, '02_Diner.mp4': 30, '03_PlanEnergyBioLab.mp4': 25,
-           '04_Ocean.mp4': 30, '05_Waterpark.mp4': 30, '06_DroneFlight.mp4': 25, '07_GazaFishermen.mp4': 25,
-           '08_Sofa.mp4': 24, '09_MattSwift.mp4': 30, '10_Cows.mp4': 24, '11_Abbottsford.mp4': 30,
-           '12_TeatroRegioTorino.mp4': 30, '13_Fountain.mp4': 30, '14_Warship.mp4': 25, '15_Cockpit.mp4': 25,
-           '16_Turtle.mp4': 30, '17_UnderwaterPark.mp4': 30, '18_Bar.mp4': 25, '19_Touvet.mp4': 30}
-    train, validation, test = Sal360().load_sal360_dataset()
-    width = 3840
-    height = 1920
     data_format = 'channels_last'
 
-    view = Viewport(width, height)
-
-    v_width = int(view.width)
-    v_height = int(view.height)
-
-    input_shape = (-1, v_width, v_height, 3)
     fixed_input_shape = (224, 224, 3)
     trace_length = None
-    state_size = (trace_length, 224, 224, 3)
+    state_size = (224, 224, 3)
 
     max_epochs = 10
     epochs = 0
+    x = dcn_resnet(state_size)
+    print(x.summary())
 
-    model = doom_drqn(state_size)
-    print(model.summary())
-    t_start = time.time()
-    print("start task!")
-    while epochs < max_epochs:
-        epochs_per_loss = []
-        for video, _x, _y in zip(sorted(os.listdir(os.path.join('sample_videos', 'train', '3840x1920'))),
-                                 train[0], train[1]):  # tr: 45, 100, 7
-            i_start = time.time()
-            video_per_loss = []
-            trace_length = fps_list[video]
-            print("{} start task!".format(video))
-            for x, y in zip(_x, _y):  # _x : 100, 7 _y : 100, 2
-                cap = cv2.VideoCapture(os.path.join('sample_videos/train/3840x1920/', video))
-                x_iter = iter(x)
-                y_iter = iter(y)
-                x_data = next(x_iter)
-                y_data = next(y_iter)
-                frame_idx = x_data[6] - x_data[5] + 1
-                prev_frame = None
-                index = 0
-
-                sequenceX = []
-                sequenceY = []
-
-                batchX = []
-                batchY = []
-
-                while True:
-                    ret, frame = cap.read()
-                    inputs = None
-                    if ret:
-                        index += 1
-                        if index == frame_idx:
-                            w, h = x_data[1] * width, x_data[2] * height
-                            view.set_center(np.array([w, h]))
-                            frame = view.get_view(frame)
-                            frame = cv2.resize(frame, (224, 224))
-
-                            x_data = next(x_iter)
-                            y_data = next(y_iter)
-                            y_data = [y_data[0] * width, y_data[1] * height]
-                            sequenceX.append(frame)
-                            sequenceY.append(y_data)
-
-                            frame_idx = x_data[6] - x_data[5] + 1
-                            index = 0
-                            prev_frame = frame
-                            if len(sequenceX) == trace_length:
-                                batchX.append(sequenceX)
-                                batchY.append(sequenceY)
-                                print(np.shape(sequenceX))
-                                print(np.shape(sequenceY))
-                                sequenceX = []
-                                sequenceY = []
-
-                    else:
-                        if len(sequenceX) > 0 and len(sequenceX) != trace_length:
-                            for i in range(trace_length - len(sequenceX)):
-                                sequenceX.append(sequenceX[-1])
-                                sequenceY.append(sequenceY[-1])
-                            batchX.append(sequenceX)
-                            batchY.append(sequenceY)
-                        sequenceX = []
-                        sequenceY = []
-                        break
-
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        break
-
-                print('batch x, y : {}, {}'.format(np.shape(batchX), np.shape(batchY)))
-                # loss = model.train_on_batch([batchX], [batchY])
-                # video_per_loss.append(loss)
-                # print("loss: ", loss)
-
-                cap.release()
-                cv2.destroyAllWindows()
-            i_end = time.time()
-
-            # plot
-            # plt.figure()
-            # plt.plot(video_per_loss)
-            # plt.title(str(epochs) + "_" + video)
-            # plt.xlabel('t')
-            # plt.ylabel('loss')
-            # plt.show()
-
-            # epochs_per_loss.append(sum(video_per_loss) / len(video_per_loss))
-
-            print("video task take {}s".format(i_end - i_start))
-            inner_path = os.path.join("model/supervised", video)
-            if not (os.path.isdir(inner_path)):
-                os.makedirs(inner_path)
-            # save weight
-            model.save_weights(os.path.join(inner_path, "_model.h5"))
-            print("Saved model to disk")
-        t_end = time.time()
-        print("total task take {}s".format(t_end - t_start))
-
-        # plt.plot(epochs_per_loss)
-        # plt.title(str(epochs) + "_" + "epochs")
-        # plt.xlabel('t')
-        # plt.ylabel('loss')
-        # plt.show()
-
-        outer_path = os.path.join("model/supervised/_" + str(epochs))
-        if not (os.path.isdir(outer_path)):
-            os.makedirs(outer_path)
-        model.save_weights(outer_path, "_model.h5")
-        print("{}th epochs saved model to disk".format(epochs))
-
-        epochs += 1
+    # model = doom_drqn(state_size)
+    # print(model.summary())

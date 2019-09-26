@@ -160,19 +160,19 @@ def dcn_resnet(input_tensor=None):
     x = identity_block_dilation(x, 3, [512, 512, 2048], stage=5, block='c', dilation_rate=(4, 4))
 
     # Create model
-    x = keras.layers.Flatten()(x)
-    x = keras.layers.Reshape((1, 1, ))
-    x = keras.layers.LSTM(512, activation='tanh')(x)
-    x = keras.layers.Dense(2, activation='linear')(x)
-    x = keras.layers.Dropout(0.5)(x)
+    # x = keras.layers.Flatten()(x)
+    # x = keras.layers.Reshape((1, 1, ))
+    # x = keras.layers.LSTM(512, activation='tanh')(x)
+    # x = keras.layers.Dense(2, activation='linear')(x)
+    # x = keras.layers.Dropout(0.5)(x)
     # x = keras.layers.Dense(10,
     #                        activation='softmax',
     #                        name='x_train_out')(x)
 
-    model = Model(inputs=img_input, outputs=x)
+    # model = Model(inputs=img_input, outputs=x)
     # Load weights
     # weights_path = get_file('resnet50_weights_th_dim_ordering_th_kernels_notop.h5', TH_WEIGHTS_PATH_NO_TOP,
     #                         cache_subdir='models', md5_hash='f64f049c92468c9affcd44b0976cdafe')
     # model.load_weights(weights_path)
 
-    return model
+    return x

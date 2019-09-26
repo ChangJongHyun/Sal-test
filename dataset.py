@@ -138,8 +138,8 @@ def data_generator():
                             frame_idx = x_data[6] - x_data[5] + 1
                             index = 0
                             if len(sequenceX) == trace_length:
-                                print("shape x : ", np.shape(sequenceX))
-                                print("shape y : ", np.shape(sequenceY))
+                                # print("shape x : ", np.shape(sequenceX))
+                                # print("shape y : ", np.shape(sequenceY))
                                 yield sequenceX, sequenceY
                                 sequenceX = []
                                 sequenceY = []
@@ -148,8 +148,8 @@ def data_generator():
                             for i in range(trace_length - len(sequenceX)):
                                 sequenceX.append(sequenceX[-1])
                                 sequenceY.append(sequenceY[-1])
-                            print("shape x : ", np.shape(sequenceX))
-                            print("shape y : ", np.shape(sequenceY))
+                            # print("shape x : ", np.shape(sequenceX))
+                            # print("shape y : ", np.shape(sequenceY))
                             yield sequenceX, sequenceY
                         break
 
@@ -162,3 +162,5 @@ def data_generator():
 
 if __name__ == '__main__':
     gen = data_generator()
+    for i in gen:
+        x, y = i
