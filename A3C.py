@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-# from tensorflow.contrib import slim
+from tensorflow.contrib import slim
 from my_resnet import dcn_resnet
 from keras.layers import Input, Dense
 from keras.layers import CuDNNLSTM, LSTMCell, LSTM

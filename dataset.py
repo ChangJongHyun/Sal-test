@@ -1,16 +1,18 @@
-import os
 import csv
-import numpy as np
+import os
+import random
+
+import cv2
+import math
 import matplotlib.pylab as plt
+import numpy as np
+from keras.layers import *
 from mpl_toolkits.mplot3d import Axes3D
 from scipy import stats
-import math
-import cv2
-import time
-import keras
-
+import pprint
 from custom_env.gym_my_env.envs.viewport import Viewport
 
+# all sequence -> 20s
 fps_list = {'01_PortoRiverside.mp4': 25, '02_Diner.mp4': 30, '03_PlanEnergyBioLab.mp4': 25,
             '04_Ocean.mp4': 30, '05_Waterpark.mp4': 30, '06_DroneFlight.mp4': 25, '07_GazaFishermen.mp4': 25,
             '08_Sofa.mp4': 24, '09_MattSwift.mp4': 30, '10_Cows.mp4': 24, '11_Abbottsford.mp4': 30,
@@ -24,12 +26,14 @@ class Sal360:
         # self.input_data = self.load_video_dataset()
         pass
 
-    def load_sal360_dataset(self):
-        path = os.path.join("dataset", "H", "Scanpaths")
+    @staticmethod
+    def load_sal360_dataset():
+        path = os.path.join("datasets", "Scanpaths_H", "Scanpaths")
         data = []
         actions = []
-
+        data_dict = {}
         for file in sorted(os.listdir(path)):
+            data_dict[file] = []
             with open(os.path.join(path, file)) as f:
                 row = csv.reader(f)
                 data.append([list(map(lambda x: [float(i) for i in x], list(row)[1:]))])
@@ -54,12 +58,103 @@ class Sal360:
         x_train, x_validation = np.array([i[:45] for i in _x_train]), np.array([i[45:] for i in _x_train])
         y_train, y_validation = np.array([i[:45] for i in _y_train]), np.array([i[45:] for i in _y_train])
 
-        print("shape : (# of video, # of person, # of data per video, # of data)")
-        print("shape of train set x, y : ", x_train.shape, y_train.shape)
-        print("shape of validation set x, y : ", x_validation.shape, y_validation.shape)
-        print("shape of test set x, y : ", x_test.shape, y_test.shape)
+        x_train_dict = {}
+        y_train_dict = {}
 
-        return (x_train, y_train), (x_validation, x_validation), (x_test, y_test)
+        x_val_dict = {}
+        y_val_dict = {}
+
+        x_test_dict = {}
+        y_test_dict = {}
+
+        for index, file in enumerate(sorted(os.listdir(path))):
+            file = file.split(".")
+            file = file[0] + ".mp4"
+            file = file.replace("_fixations", "")
+            if index < 14:
+                x_train_dict[file] = x_train[index]
+                y_train_dict[file] = y_train[index]
+                x_val_dict[file] = x_validation[index]
+                y_val_dict[file] = y_validation[index]
+            else:
+                x_test_dict[file] = x_test[index - 15]
+                y_test_dict[file] = y_test[index - 15]
+        # print("shape : (# of video, # of person, # of data per video, # of data)")
+        # print("shape of train set x, y : ", x_train.shape, y_train.shape)
+        # print("shape of validation set x, y : ", x_validation.shape, y_validation.shape)
+        # print("shape of test set x, y : ", x_test.shape, y_test.shape)
+
+        return (x_train_dict, y_train_dict), (x_val_dict, x_val_dict), (x_test_dict, y_test_dict)
+
+    @staticmethod
+    def load_sal360v2():
+        path = os.path.join("datasets", "Scanpaths_H", "Scanpaths")
+
+        data = []
+        actions = []
+        data_dict = {}
+
+        for file in sorted(os.listdir(path)):
+            data_dict[file] = []
+            with open(os.path.join(path, file)) as f:
+                row = csv.reader(f)
+                data.append([list(map(lambda x: [float(i) for i in x], list(row)[1:]))])
+
+        np_data = np.array(data).reshape((-1, 7))
+
+        for idx in range(len(np_data)):
+            if np_data[idx][0] == 99.:
+                action = (0, 0)
+            else:
+                action = (np_data[idx + 1][1] - np_data[idx][1], np_data[idx + 1][2] - np_data[idx][1])
+            actions.append(action)
+
+        actions = np.array(actions)
+
+        np_data = np_data.reshape((19, 57, 100, 7))
+        actions = actions.reshape((19, 57, 100, 2))
+
+        _x_train, x_test = np_data[:14, :, :99, :], np_data[14:, :, :99, :]
+        _y_train, y_test = actions[:14, :, :99, :], actions[14:, :, :99, :]
+        x_train, x_validation = _x_train[:, :45, :, :], _x_train[:, 45:, :, :]
+        y_train, y_validation = _y_train[:, :45, :, :], _y_train[:, 45:, :, :]
+
+        print(np.shape(x_train), np.shape(y_train))
+        print(np.shape(x_validation), np.shape(y_validation))
+        print(np.shape(x_test), np.shape(y_test))
+        print(x_train[0][0][-1])
+        print(y_train[0][0][-1])
+
+        x_train_dict = {}
+        y_train_dict = {}
+
+        x_val_dict = {}
+        y_val_dict = {}
+
+        x_test_dict = {}
+        y_test_dict = {}
+
+        train_length = len(x_train)
+        for index, file in enumerate(sorted(os.listdir(path))):
+            file = file.split(".")
+            file = file[0] + ".mp4"
+            file = file.replace("_fixations", "")
+            if index < train_length:
+                """train data"""
+                x_train_dict[file] = x_train[index]
+                y_train_dict[file] = y_train[index]
+                """validation data"""
+                x_val_dict[file] = x_validation[index]
+                y_val_dict[file] = y_validation[index]
+            else:
+                """"test data"""
+                x_test_dict[file] = x_test[index - train_length]
+                y_test_dict[file] = y_test[index - train_length]
+        # print("shape : (# of video, # of person, # of data per video, # of data)")
+        # print("shape of train set x, y : ", x_train.shape, y_train.shape)
+        # print("shape of validation set x, y : ", x_validation.shape, y_validation.shape)
+        # print("shape of test set x, y : ", x_test.shape, y_test.shape)
+        return (x_train_dict, y_train_dict), (x_val_dict, y_val_dict), (x_test_dict, y_test_dict)
 
     def plot_state_data(self, data):
         assert np.shape(data) == 25, 2
@@ -97,70 +192,183 @@ class Sal360:
             print("avg L2 norm : {}".format(min(distance)))
 
 
-def data_generator():
-    train, validation, test = Sal360().load_sal360_dataset()
-    width = 3840
-    height = 1920
-    view = Viewport(width, height)
+class DataGenerator:
+    # train, validation, test = Sal360.load_sal360_dataset()
+    train, validation, test = Sal360.load_sal360v2()
 
-    while True:
-        for video, _x, _y in zip(sorted(os.listdir(os.path.join('sample_videos', 'train', '3840x1920'))),
-                                 train[0], train[1]):  # tr: 45, 100, 7
-            trace_length = fps_list[video]
-            for x, y in zip(_x, _y):  # _x : 100, 7 _y : 100, 2
-                cap = cv2.VideoCapture(os.path.join('sample_videos/train/3840x1920/', video))
-                x_iter = iter(x)
-                y_iter = iter(y)
-                x_data = next(x_iter)
-                y_data = next(y_iter)
-                frame_idx = x_data[6] - x_data[5] + 1
-                index = 0
+    @staticmethod
+    def generator(img_w, img_h, type="train", resolution='3840x1920', tiling=False, return_batch=True, normalize=False):
+        if type == "train":
+            gen = DataGenerator.train
+            videos = os.listdir(os.path.join('sample_videos', type, resolution))
+            videos = videos[:15]
+        elif type == "test":
+            gen = DataGenerator.test
+            videos = os.listdir(os.path.join('sample_videos', type, resolution))
+            videos = videos[15:]
+        elif type == "validation":
+            gen = DataGenerator.validation
+            type = 'train'  # train과 validation의 폴더는 같아
+            videos = os.listdir(os.path.join('sample_videos', type, resolution))
+            videos = videos[:15]
+        else:
+            raise ValueError("invalid value(train, test, validation)")
 
-                sequenceX = []
-                sequenceY = []
+        width, height = list(map(lambda x: int(x), resolution.split('x')))
+        view = Viewport(width, height)
+        x_dict, y_dict = gen[0], gen[1]
 
-                while True:
+        idx = 0
+        while True:
+            video = random.choice(videos)
+            random_x, random_y = random.choice(x_dict[video]), random.choice(y_dict[video])  # 100, 7
+            video_path = os.path.join('sample_videos', type, resolution, video)
+            cap = cv2.VideoCapture(video_path)
+            # trace_length = fps_list[video]
+            batch_x, batch_y = None, []
+            actions = np.array([0., 0.])
+            for idx, random_data in enumerate(zip(random_x, random_y)):  # _x : 7,  _y : 2,
+                _x, _y = random_data
+                frame_idx = _x[6] - _x[5] + 1
+                frames = []
+                actions += _y
+                if (idx is not 0 and idx % 5 is 0) or idx is 99:
+                    batch_y.append(actions)
+                    actions = np.array([0., 0.])
+
+                while len(frames) < frame_idx and cap.isOpened():
                     ret, frame = cap.read()
                     if ret:
-                        index += 1
-                        if index == frame_idx:
-                            w, h = x_data[1] * width, x_data[2] * height
-                            view.set_center(np.array([w, h]))
-                            frame = view.get_view(frame)
-                            frame = cv2.resize(frame, (224, 224))
-
-                            x_data = next(x_iter)
-                            y_data = next(y_iter)
-                            y_data = [y_data[0] * width, y_data[1] * height]
-                            sequenceX.append(frame)
-                            sequenceY.append(y_data)
-
-                            frame_idx = x_data[6] - x_data[5] + 1
-                            index = 0
-                            if len(sequenceX) == trace_length:
-                                # print("shape x : ", np.shape(sequenceX))
-                                # print("shape y : ", np.shape(sequenceY))
-                                yield sequenceX, sequenceY
-                                sequenceX = []
-                                sequenceY = []
+                        w, h = _x[1] * width, _x[2] * height
+                        view.set_center(np.array([w, h]))
+                        frame = view.get_view(frame)
+                        frame = cv2.resize(frame, (img_w, img_h))
+                        frames.append(frame)
+                        if len(frames) == frame_idx:
+                            if batch_x is None:
+                                batch_x = frames
+                            else:
+                                batch_x = np.concatenate((batch_x, frames))
+                        if cv2.waitKey(1) & 0xFF == ord('q'):
+                            break
+                        # if index == frame_idx:
+                        #     w, h = _x[1] * width, _x[2] * height
+                        #     view.set_center(np.array([w, h]))
+                        #     frame = view.get_view(frame)
+                        #     frame = cv2.resize(frame, (img_w, img_h))
+                        #
+                        #     sequenceX.append(frame)
+                        #
+                        #     if tiling:
+                        #         tiles = view.find_tile()
+                        #     else:
+                        #         if not normalize:
+                        #             _y = np.array([_y[0] * width, _y[1] * height], dtype=np.float64)
+                        #         __y = [0] * 4
+                        #
+                        #         __y[0] = _y[0] if _y[0] >= 0 else 0
+                        #         __y[1] = _y[0] * -1 if _y[0] < 0 else 0
+                        #
+                        #         __y[2] = _y[1] if _y[1] >= 0 else 0
+                        #         __y[3] = _y[1] * -1 if _y[1] < 0 else 0
+                        #         sequenceY.append(__y)
+                        #
+                        #     index = 0
+                        #     # if len(sequenceX) == trace_length:
+                        #     if tiling:
+                        #         yield np.array([sequenceX]), np.array([tiles])
+                        #     else:
+                        #         batch_x.append(sequenceX)
+                        #         batch_y.append(sequenceY)
+                        #         yield np.array([sequenceX]), np.array([sequenceY])
+                        #         sequenceY = []
+                        #     sequenceX = []
+                        #     continue
                     else:
-                        if len(sequenceX) > 0 and len(sequenceX) != trace_length:
-                            for i in range(trace_length - len(sequenceX)):
-                                sequenceX.append(sequenceX[-1])
-                                sequenceY.append(sequenceY[-1])
-                            # print("shape x : ", np.shape(sequenceX))
-                            # print("shape y : ", np.shape(sequenceY))
-                            yield sequenceX, sequenceY
+                        if len(frames) != 0:
+                            batch_x = np.concatenate((batch_x, frames))
                         break
 
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
+            cap.release()
+            cv2.destroyAllWindows()
+
+            error = len(batch_x) - fps_list[video] * 20
+            if error:
+                batch_x = batch_x[:len(batch_x) - error]
+
+            batch_x = np.reshape(batch_x, (20, -1, img_w, img_h, 3))
+
+            for x_data, y_data in zip(batch_x, batch_y):
+                y = [0] * 4
+
+                if y_data[0] >= 0:
+                    y[0] = 1
+                else:
+                    y[1] = 1
+                if y_data[1] >= 0:
+                    y[2] = 1
+                else:
+                    y[3] = 1
+                yield np.array([x_data]), np.array([y])
+
+    @staticmethod
+    def generator_for_batch(img_w, img_h, type="train", resolution='3840x1920', tiling=False, return_batch=True,
+                            normalize=False):
+        if type == "train":
+            gen = DataGenerator.train
+            dir_path = "train"
+            videos = os.listdir(os.path.join('sample_videos', dir_path, resolution))
+            videos = videos[:15]
+        elif type == "test":
+            gen = DataGenerator.test
+            dir_path = "test"
+            videos = os.listdir(os.path.join('sample_videos', dir_path, resolution))
+            videos = videos[15:]
+        elif type == "validation":
+            gen = DataGenerator.validation
+            dir_path = "train"
+            videos = os.listdir(os.path.join('sample_videos', dir_path, resolution))
+            videos = videos[:15]
+        else:
+            raise ValueError("invalid value(train, test, validation)")
+
+        width, height = list(map(lambda x: int(x), resolution.split('x')))
+        view = Viewport(width, height)
+        x_dict, y_dict = gen[0], gen[1]
+        while True:
+            """ random video select """
+            video = random.choice(videos)
+            random_x, random_y = random.choice(x_dict[video]), random.choice(y_dict[video])  # (99, 7), (99, 2)
+            video_path = os.path.join('sample_videos', dir_path, resolution, video)
+            cap = cv2.VideoCapture(video_path)
+            print(type, " video ", video)
+            for idx, random_data in enumerate(zip(random_x, random_y)):
+                _x, _y = random_data  # _x : (7,)  _y : (2,)
+                frame_idx = _x[6] - _x[5] + 1  # 5 ~ 8의 window size (time)
+                frames = []  # store frame
+
+                while len(frames) < frame_idx and cap.isOpened():
+                    ret, frame = cap.read()
+                    if ret:
+                        w, h = _x[1] * width, _x[2] * height
+                        view.set_center(np.array([w, h]))
+                        frame = view.get_view(frame)
+                        frame = cv2.resize(frame, (img_w, img_h))
+                        frames.append(frame)
+                        if len(frames) == frame_idx:
+                            yield np.array([frames]), np.array([_y])
+                        if cv2.waitKey(1) & 0xFF == ord('q'):
+                            break
+                    else:
                         break
 
-                cap.release()
-                cv2.destroyAllWindows()
+            # 위치 중요
+            cap.release()
+            cv2.destroyAllWindows()
 
 
 if __name__ == '__main__':
-    gen = data_generator()
-    for i in gen:
-        x, y = i
+    gen = DataGenerator.generator_for_batch(224, 224, type='validation')
+    # gen = DataGenerator.generator(224, 224)
+    for x, y in gen:
+        print(x[0][0])
