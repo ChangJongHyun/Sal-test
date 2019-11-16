@@ -5,27 +5,42 @@ import numpy as np
 import cv2
 import os
 from custom_env.gym_my_env.envs.viewport import Viewport
+from dataset import DataGenerator
 
 delta = np.array([[0, 0], [0, 1], [0, -1], [1, 0], [-1, 0]])
 
+n_samples = 1
+width = 224
+height = 224
+n_channels = 3
 
 
 class MyEnv(gym.Env):
 
     def __init__(self):
+        self.type = 'train'
+        self.DataGenerator = DataGenerator.generator_for_batch()
+        # TODO 타겟 폴더변경
+        # TODO EXPERT mode and AGENT mode ??
         self.files = os.listdir("src")
-        self.action_space = spaces.Box(0, 2, [2])  # 0~2 사이의 1x2 벡터
-        width, height = self.cap.get(3), self.cap.get(4)
-        # self.observation_space = spaces.Box(low=np.array([0, 0]),
-        #                                     high=np.array([width, height]), dtype=int)
+        self.action_space = spaces.Box(-1, 1, [2])  # 0~2 사이의 1x2 벡터
+        self.observation_space = spaces.Box(low=0, high=255, shape=(n_samples, width, height, n_channels))
 
-        self.observation_space = None
-        self.result = None  # object detection info
         self.cap = None  # video input
         self.agent = None  # viewport
         self.view = None  # viewport's area / current state
         self.ret, self.frame = None, None  # done, current video frame
         self.done = False
+
+    def set_dataset(self, type='train'):
+        if type == 'train':
+            pass
+        elif type == 'validation':
+            pass
+        elif type == 'test':
+            pass
+        else:
+            raise NotImplementedError
 
     def print_info(self):
         print(self.result)
@@ -38,20 +53,12 @@ class MyEnv(gym.Env):
 
     # return -> observation, reward, done(bool), info
     def step(self, action):
-        self.ret, self.frame = self.read_frame()
-        assert self.action_space.contains(action)
-        self.done = not self.ret
-        if self.done is True:
-            return None, None, self.done, None
-        else:
-            self.agent.move(delta[action])
-            self.view = self.agent.get_view(frame=self.frame)
-            self.view = cv2.resize(self.view, (84, 84))
-            # TODO rewrd
-            return self.view, reward, self.done, None
+        # TODO 1개의 데이터셋의 값들을 받고 state, done 설정
+        return self.view, reward, self.done, None
 
     # 나중에 여러개의 영상을 학습하려면 iterate하게 영상을 선택하도록 바꿔야함.
     def reset(self):
+        # TODO 다른 영상의 다른 saliency로 변경
         file = self.files[self.gen()]
         self.cap = cv2.VideoCapture('src/' + file)
         self.agent = Viewport(self.cap.get(3), self.cap.get(4))

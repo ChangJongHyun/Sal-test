@@ -28,9 +28,25 @@ class Viewport:
         self._build_view()
         self.point = []
 
-    def __tiling__(self, n, m):
-        tile_x = [self.VIDEO_WIDTH / i for i in range(n)]
-        tile_y = [self.VIDEO_HEIGHT / i for i in range(m)]
+    def find_tile(self):
+        n, m = 4, 8
+        h = self.VIDEO_HEIGHT / n
+        w = self.VIDEO_WIDTH / m
+        points = self.get_rectangle_point()
+        tiles = [0 for _ in range(n * m)]
+        for point in points:
+            p = (int(point[0] / w), int(point[1] / h), int(point[2] / w), int(point[3] / h))
+            x = [_ * m for _ in range(p[1], p[3] + 1)]
+            y = [_ for _ in range(p[0], p[2] + 1)]
+            for i in y:
+                for j in x:
+                    tiles[j + i] = 1
+
+            for i in range(p[0], p[2] + 1):
+                tiles[x + i] = 1
+                # TODO array out of index error
+                tiles[y + i] = 1
+        return tiles
 
     def _build_view(self):
         self.view = np.array([self.center[0] - self.width / 2, self.center[0] + self.width / 2,
@@ -71,18 +87,17 @@ class Viewport:
             return merge(self.view_dict["left"], self.view_dict["right"], frame)
 
     def get_rectangle_point(self):
+        # form --> (x1, y1), (x2, y2)
         if self.view is not None:
-            rec = (self.view[0], self.view[2]), (self.view[1], self.view[3])
-            return [rec]
+            return [(self.view[0], self.view[2], self.view[1], self.view[3])]
         else:
             l = self.view_dict["left"]
             r = self.view_dict["right"]
-            l_rec = (l[0], l[2]), (l[1], l[3])
-            r_rec = (r[0], r[2]), (r[1], r[3])
-            return [l_rec, r_rec]
+            l_rec = (l[0], l[2], l[1], l[3])
+            r_rec = (r[0], r[2], r[1], r[3])
+            return l_rec, r_rec
 
     # move --> [x,x] 2x1 vector
-
     def move(self, v):
         assert len(v) is 2, "input vector size must 2"
         self.center[0] += v[0]
