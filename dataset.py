@@ -8,7 +8,6 @@ import matplotlib.pylab as plt
 import numpy as np
 from keras.layers import *
 from mpl_toolkits.mplot3d import Axes3D
-from scipy import stats
 import pprint
 from custom_env.gym_my_env.envs.viewport import Viewport
 
@@ -185,11 +184,11 @@ class Sal360:
             i_T = i.transpose()
             distance = [l2norm(p1, p2) for p1, p2 in zip(base, ii)]
 
-            kld_x = stats.entropy(pk=base_prob_T[0], qk=i_T[0])
-            kld_y = stats.entropy(pk=base_prob_T[1], qk=i_T[1])
+            # kld_x = stats.entropy(pk=base_prob_T[0], qk=i_T[0])
+            # kld_y = stats.entropy(pk=base_prob_T[1], qk=i_T[1])
 
-            print("KL divergence (x, y) : ({}, {})".format(kld_x, kld_y))
-            print("avg L2 norm : {}".format(min(distance)))
+            # print("KL divergence (x, y) : ({}, {})".format(kld_x, kld_y))
+            # print("avg L2 norm : {}".format(min(distance)))
 
 
 class DataGenerator:
@@ -338,7 +337,9 @@ class DataGenerator:
         while True:
             """ random video select """
             video = random.choice(videos)
-            random_x, random_y = random.choice(x_dict[video]), random.choice(y_dict[video])  # (99, 7), (99, 2)
+            random_idx = random.randint(0, len(x_dict[video]))
+            random_x, random_y = x_dict[video][random_idx], x_dict[video][random_idx]  # (99, 7), (99, 2)
+
             video_path = os.path.join('sample_videos', dir_path, resolution, video)
             cap = cv2.VideoCapture(video_path)
             print(type, " video ", video)
@@ -371,4 +372,4 @@ if __name__ == '__main__':
     gen = DataGenerator.generator_for_batch(224, 224, type='validation')
     # gen = DataGenerator.generator(224, 224)
     for x, y in gen:
-        print(x[0][0])
+        pass
