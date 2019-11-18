@@ -1,6 +1,7 @@
 import os
 import random
 
+import tensorflow as tf
 import gym
 from gym import spaces
 import numpy as np
@@ -8,6 +9,8 @@ import cv2
 
 from custom_env.gym_my_env.envs.viewport import Viewport
 from dataset import DataGenerator, Sal360
+from GAIL.jupyter.utils import generate_expert_trajectory
+
 
 delta = np.array([[0, 0], [0, 1], [0, -1], [1, 0], [-1, 0]])
 
@@ -78,8 +81,11 @@ class MyEnv(gym.Env):
         for i in range(frame_idx):
             ret, frame = self.cap.read()
             if ret:
-                w, h = x_data[1] * 3840, x_data[2] * 1920
-                self.view.set_center(np.array([w, h]))
+                if action is None:
+                    w, h = x_data[1] * 3840, x_data[2] * 1920
+                    self.view.set_center(np.array([w, h]))
+                else:
+                    self.view.move(action)
                 frame = self.view.get_view(frame)
                 frame = cv2.resize(frame, (width, height))
                 frames.append(frame)
@@ -87,7 +93,6 @@ class MyEnv(gym.Env):
                 self.cap.release()
                 return None, 0, not ret, None
 
-        self.observation = np.array([frames])
         return self.observation, 0, not ret, y_data
 
     # 나중에 여러개의 영상을 학습하려면 iterate하게 영상을 선택하도록 g바꿔야함.
@@ -101,7 +106,7 @@ class MyEnv(gym.Env):
         self.x_iter, self.y_iter = iter(random_x), iter(random_y)
         self.view = Viewport(3840, 1920)
         print('start video: ', target_video)
-
+        return target_video
     def render(self):
         for frame in self.observation[0]:
             cv2.imshow("video", frame)
@@ -114,11 +119,13 @@ class MyEnv(gym.Env):
 # test agent
 if __name__ == '__main__':
     env = gym.make("my-env-v0")
-    print(env.action_space.shape)
-    print(env.observation_space.shape)
-    env.reset()
-    while True:
-        state, r, done, ac = env.step()
-        print(np.shape(state), ac, done)
+    envs = gym.make("my-env-v0")
+    expert_ob, expert_ac, videos = generate_expert_trajectory(env, 3)
+    obs = []
+    for target in videos:
+        envs.reset(target_video=target)
+        ob, _, done, _ = envs.step((0.1, 0))
+        obs.append(ob)
         if done:
-            env.reset()
+            break
+    print(np.shape(obs), np.shape(expert_ob))

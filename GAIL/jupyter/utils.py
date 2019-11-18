@@ -14,9 +14,9 @@ def compute_gae(next_value, rewards, masks, values, gamma=0.99, tau=0.95):
 
 
 def ppo_iter(mini_batch_size, obs, acs, returns, advantage):
-    batch_size = obs.shape[0]
+    batch_size = obs.shape[0]  # observation 의 수
     for _ in range(batch_size // mini_batch_size):
-        rand_ids = np.random.randint(0, batch_size, mini_batch_size)
+        rand_ids = np.random.randint(0, batch_size, mini_batch_size)  # mini_batch_size 만큼 sampling
         yield (obs[rand_ids, :], acs[rand_ids, :],
                returns[rand_ids, :], advantage[rand_ids, :])
 
@@ -41,3 +41,23 @@ def test_env(model, env, vis=False):
         ob = next_ob
         total_reward += reward
     return total_reward
+
+
+def generate_expert_trajectory(env, num_envs):
+    obs = []
+    acs = []
+    target_videos = []
+    for i in range(num_envs):
+        target_video = env.reset()
+        target_videos.append(target_video)
+        while True:
+            observation, r, done, action = env.step()
+            if done:
+                break
+            else:
+                obs.append(observation)
+                acs.append(action)
+    # expert_obs, expert_acs
+    print("expert_obs size : ", np.shape(obs))
+    print("expert_acs size : ", np.shape(acs))
+    return obs, acs, target_videos

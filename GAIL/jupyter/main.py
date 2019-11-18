@@ -6,7 +6,10 @@ from GAIL.jupyter.PPO import PPO
 import matplotlib.pyplot as plt
 
 from custom_env.gym_my_env.envs import my_env
-from GAIL.utils import *
+from GAIL.jupyter.utils import *
+
+epochs = 10
+num_envs = 16
 
 ppo_hidden_size = 256
 discriminator_hidden_size = 128
@@ -22,11 +25,8 @@ test_rewards = []
 
 envs = gym.make("my-env-v0")
 
-ob_shape = [None] + list(envs.observation_space.shape)
+ob_shape = [None] + list(envs.observation_space.shape)  # n_samples + (width, height, channels)
 ac_shape = list(envs.action_space.shape)
-
-ob = envs.reset()
-early_stop = False
 
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
@@ -37,60 +37,109 @@ discriminator = Discriminator(sess, ob_shape, ac_shape, discriminator_hidden_siz
 sess.run(tf.global_variables_initializer())
 
 i_update = 0
-state = envs.reset()
+ob = envs.reset()
 early_stop = False
 
-while frame_idx < max_frames and not early_stop:
-    i_update += 1
 
-    values = []
-    obs = []
-    acs = []
-    rewards = []
-    masks = []
-    entropy = 0
-    expert_ac = []
+for _ in range(epochs):
+    expert_ob, expert_ac, target_videos = generate_expert_trajectory(envs, num_envs)
 
-    for _ in range(num_steps):
+    while frame_idx < max_frames and not early_stop:
+        i_update += 1
+        # params
+        for target in target_videos:
+            values = []
+            obs = []
+            acs = []
+            rewards = []
+            masks = []
+            entropy = 0
 
-        ac = ppo.get_action(ob)
-        next_ob, _, done, action = envs.step(ac)
-        reward = discriminator.get_reward(ob, ac)
+            envs.reset(target_video=target)
+            ob, _, done, _ = envs.step()
 
-        value = ppo.get_value(ob)
-        values.append(value)
-        rewards.append(reward[:, np.newaxis])
-        masks.append((1 - done)[:, np.newaxis])
+            while True:
+                ac, value = ppo.get_action(ob), ppo.get_value(ob)
+                reward = discriminator.get_reward(ob, ac)
+                next_ob, _, done, _ = envs.step(action=ac)
+                if done:
+                    break
+                else:
+                    values.append(value)
+                    rewards.append(reward)
+                    masks.append((1 - done))
+                    obs.append(ob)
+                    acs.append(ac)
 
-        obs.append(ob)
-        acs.append(ac)
+                    frame_idx += 1
 
-        ob = next_ob
-        frame_idx += 1
+                    next_value = ppo.get_value(next_ob)
+                    returns = compute_gae(next_value, rewards, masks, values)
+                    advantages = np.array(returns) - np.array(values)
+                    # Policy Update
+                    if i_update % 3 == 0:
+                        ppo.assign_old_pi()
+                        ppo.update(obs, acs, returns, advantages)
+                    print('expert obs : ', np.shape(expert_ob))
+                    print('agent_ obs : ', np.shape(obs))
 
-        if frame_idx % 1000 == 0:
-            test_reward = np.mean([test_env(ppo) for _ in range(10)])
-            test_rewards.append(test_reward)
-            plot(frame_idx, test_rewards)
-            if test_reward > threshold_reward: early_stop = True
+                    # Discriminator Update
+                    discriminator.update(np.concatenate([expert_ob, obs]),
+                                         np.concatenate([expert_ac, acs]))
 
-    next_value = ppo.get_value(next_ob)
-    returns = compute_gae(next_value, rewards, masks, values)
 
-    returns = np.concatenate(returns)
-    values = np.concatenate(values)
-    obs = np.concatenate(obs)
-    acs = np.concatenate(acs)
-    advantages = returns - values
 
-    # Policy Update
-    if i_update % 3 == 0:
-        ppo.assign_old_pi()
-        for _ in range(ppo_epochs):
-            for ob_batch, ac_batch, return_batch, adv_batch in ppo_iter(mini_batch_size, obs, acs, returns, advantages):
-                ppo.update(ob_batch, ac_batch, return_batch, adv_batch)
-
-    # Discriminator Update
-    expert_ob_ac = expert_traj[np.random.randint(0, expert_traj.shape[0], num_steps * num_envs), :]
-    policy_ob_ac = np.concatenate([obs, acs], 1)
-    discriminator.update(np.concatenate([expert_ob_ac, policy_ob_ac], axis=0))
+# while frame_idx < max_frames and not early_stop:
+#     i_update += 1
+#
+#     values = []
+#     obs = []
+#     acs = []
+#     rewards = []
+#     masks = []
+#     entropy = 0
+#
+#     # 20 step 마다 discrim update 60 step 마다 policy update
+#     for _ in range(num_steps):
+#
+#         ac = ppo.get_action(ob)
+#         next_ob, _, done, action = envs.step(ac)
+#         reward = discriminator.get_reward(ob, ac)
+#
+#         value = ppo.get_value(ob)
+#         values.append(value)
+#         # TODO [:, np.newaxis] 지워도 될거 같기도..
+#         rewards.append(reward[:, np.newaxis])
+#         masks.append((1 - done)[:, np.newaxis])
+#
+#         obs.append(ob)
+#         acs.append(ac)
+#
+#         ob = next_ob
+#         frame_idx += 1
+#
+#         if frame_idx % 1000 == 0:
+#             test_reward = np.mean([test_env(ppo) for _ in range(10)])
+#             test_rewards.append(test_reward)
+#             plot(frame_idx, test_rewards)
+#             if test_reward > threshold_reward: early_stop = True
+#
+#     next_value = ppo.get_value(next_ob)
+#     returns = compute_gae(next_value, rewards, masks, values)
+#
+#     returns = np.concatenate(returns)
+#     values = np.concatenate(values)
+#     obs = np.concatenate(obs)
+#     acs = np.concatenate(acs)
+#     advantages = returns - values
+#
+#     # Policy Update
+#     if i_update % 3 == 0:
+#         ppo.assign_old_pi()
+#         for _ in range(ppo_epochs):
+#             for ob_batch, ac_batch, return_batch, adv_batch in ppo_iter(mini_batch_size, obs, acs, returns, advantages):
+#                 ppo.update(ob_batch, ac_batch, return_batch, adv_batch)
+#
+#     # Discriminator Update
+#     policy_ob_ac = np.concatenate([obs, acs], 1)
+#     discriminator.update(np.concatenate([expert_ob_ac, policy_ob_ac], axis=0))

@@ -30,7 +30,7 @@ class ActorCritic:
 
             s_flatten = tf.keras.layers.Flatten(name='state_flatten')(s_batch_norm_3)
 
-            c_out = tf.keras.layers.Dense(1, name='c_out')(s_flatten)
+            c_out = tf.keras.layers.Dense(1, name='c_out', activation=None)(s_flatten)
 
         with tf.variable_scope('actor'):
             s_layer_1 = tf.keras.layers.ConvLSTM2D(64, 3, name='state_layer1', return_sequences=True)(self.obs)
@@ -44,14 +44,16 @@ class ActorCritic:
 
             s_flatten = tf.keras.layers.Flatten(name='state_flatten')(s_batch_norm_3)
 
-            a_out = tf.keras.layers.Dense(1, name='c_out')(s_flatten)
+            a_out = tf.keras.layers.Dense(self.num_ac, name='c_out', activation=None)(s_flatten)
 
             log_std = tf.get_variable('log_std', [1, self.num_ac], dtype=tf.float32,
                                       initializer=tf.constant_initializer(self.init_std),
                                       trainable=self.trainable)
 
         std = tf.exp(log_std)
-        a_dist = dist.Normal(a_out, std)
+
+        # loc --> mean, scale --> standard deviation
+        a_dist = dist.Normal(loc=a_out, scale=std)
         self.log_prob = a_dist.log_prob(self.acs)
         self.entropy = tf.reduce_mean(a_dist.entropy())
 
