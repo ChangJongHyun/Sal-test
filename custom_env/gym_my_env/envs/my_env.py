@@ -11,7 +11,6 @@ from custom_env.gym_my_env.envs.viewport import Viewport
 from dataset import DataGenerator, Sal360
 from GAIL.jupyter.utils import generate_expert_trajectory
 
-
 delta = np.array([[0, 0], [0, 1], [0, -1], [1, 0], [-1, 0]])
 
 n_samples = 1
@@ -24,7 +23,8 @@ video_path = os.path.join("sample_videos", "3840x1920")
 
 class MyEnv(gym.Env):
 
-    def __init__(self, mode='expert'):
+    def __init__(self, mode='expert', test=False):
+        self.test = test
         type = 'train'  # default is train
         self.mode = mode
         self.train, self.validation, self.test = Sal360.load_sal360v2()
@@ -66,18 +66,16 @@ class MyEnv(gym.Env):
         return self.cap.read()  # return ret, frame
 
     # return -> observation, reward, done(bool), info
-    def step(self, action=None):
-        if self.mode == 'expert':
-            pass
-        elif self.mode == 'agent':
-            pass
-        else:
-            raise NotImplemented
-        # TODO 1개의 데이터셋의 값들을 받고 state, done 설정
-        x_data, y_data = next(self.x_iter), next(self.y_iter)
-        frame_idx = int(x_data[6] - x_data[5] + 1)
+    def step(self, action=None, test=False):
+        try:
+            x_data, y_data = next(self.x_iter), next(self.y_iter)
+        except StopIteration:
+            return None, None, True, None
+
+        frame_idx = int(x_data[6] - x_data[5])
         frames = []
         ret = None
+
         for i in range(frame_idx):
             ret, frame = self.cap.read()
             if ret:
@@ -85,15 +83,21 @@ class MyEnv(gym.Env):
                     w, h = x_data[1] * 3840, x_data[2] * 1920
                     self.view.set_center(np.array([w, h]))
                 else:
-                    self.view.move(action)
+                    self.view.move((action[0] * 3840, action[1] * 1920))
                 frame = self.view.get_view(frame)
-                frame = cv2.resize(frame, (width, height))
-                frames.append(frame)
+                try:
+                    frame = cv2.resize(frame, (width, height))
+                    frames.append(frame)
+                except Exception as e:
+                    pass
             else:
                 self.cap.release()
                 return None, 0, not ret, None
-
-        return self.observation, 0, not ret, y_data
+        if len(frames) < 1:
+            return None, 0, True, None
+        else:
+            self.observation = frames
+            return self.observation, 0, not ret, y_data
 
     # 나중에 여러개의 영상을 학습하려면 iterate하게 영상을 선택하도록 g바꿔야함.
     def reset(self, target_video=None):
@@ -105,27 +109,20 @@ class MyEnv(gym.Env):
         self.cap = cv2.VideoCapture(os.path.join(self.video_path, target_video))
         self.x_iter, self.y_iter = iter(random_x), iter(random_y)
         self.view = Viewport(3840, 1920)
-        print('start video: ', target_video)
+        # print('start video: ', target_video)
         return target_video
+
     def render(self):
-        for frame in self.observation[0]:
+        for frame in self.observation:
             cv2.imshow("video", frame)
             # "q" --> stop and print info
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-        cv2.destroyAllWindows()
 
 
 # test agent
 if __name__ == '__main__':
     env = gym.make("my-env-v0")
     envs = gym.make("my-env-v0")
-    expert_ob, expert_ac, videos = generate_expert_trajectory(env, 3)
-    obs = []
-    for target in videos:
-        envs.reset(target_video=target)
-        ob, _, done, _ = envs.step((0.1, 0))
-        obs.append(ob)
-        if done:
-            break
-    print(np.shape(obs), np.shape(expert_ob))
+    expert_ob, expert_ac, videos = generate_expert_trajectory(env, 5, render=True)
+    print(np.shape(expert_ob[0]))

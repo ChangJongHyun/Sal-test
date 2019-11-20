@@ -113,16 +113,14 @@ class Sal360:
         np_data = np_data.reshape((19, 57, 100, 7))
         actions = actions.reshape((19, 57, 100, 2))
 
-        _x_train, x_test = np_data[:14, :, :99, :], np_data[14:, :, :99, :]
-        _y_train, y_test = actions[:14, :, :99, :], actions[14:, :, :99, :]
+        _x_train, x_test = np_data[:14, :, :, :], np_data[14:, :, :, :]
+        _y_train, y_test = actions[:14, :, :, :], actions[14:, :, :, :]
         x_train, x_validation = _x_train[:, :45, :, :], _x_train[:, 45:, :, :]
         y_train, y_validation = _y_train[:, :45, :, :], _y_train[:, 45:, :, :]
 
         print(np.shape(x_train), np.shape(y_train))
         print(np.shape(x_validation), np.shape(y_validation))
         print(np.shape(x_test), np.shape(y_test))
-        print(x_train[0][0][-1])
-        print(y_train[0][0][-1])
 
         x_train_dict = {}
         y_train_dict = {}

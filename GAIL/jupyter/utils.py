@@ -1,16 +1,22 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import cv2
 
 
-def compute_gae(next_value, rewards, masks, values, gamma=0.99, tau=0.95):
-    values = values + [next_value]
+def compute_gae(next_value, rewards, masks, values, gamma=0.99, tau=0.95, scalar=True):
     gae = 0
     returns = []
-    for step in reversed(range(len(rewards))):
-        delta = rewards[step] + gamma * values[step + 1] * masks[step] - values[step]
-        gae = delta + gamma * tau * masks[step] * gae
-        returns.insert(0, gae + values[step])
-    return returns
+    if scalar:
+        delta = rewards + gamma * next_value * masks - values
+        gae = delta + gamma * tau * masks * gae
+        return gae + values
+    else:
+        values = values + [next_value]
+        for step in reversed(range(len(rewards))):
+            delta = rewards[step] + gamma * values[step + 1] * masks[step] - values[step]
+            gae = delta + gamma * tau * masks[step] * gae
+            returns.insert(0, gae + values[step])
+        return returns
 
 
 def ppo_iter(mini_batch_size, obs, acs, returns, advantage):
@@ -29,21 +35,35 @@ def plot(frame_idx, rewards):
     plt.show()
 
 
-def test_env(model, env, vis=False):
-    ob = env.reset()
-    done = False
+def test_env(model, env, render=False):
+    target_video = env.reset()
+    print("test env : ", target_video)
+    fourcc = cv2.VideoWriter_fourcc(*'DIVX')
+    # out = cv2.VideoWriter('output_' + target_video + '.avi', fourcc, 25, 224, 224)
     total_reward = 0
-    while not done:
-        if vis:
+    ob, _, _, action = env.step()  # initial state
+    # for i in ob:
+    #     out.write(i)
+    while True:
+        if render:
             env.render()
         ac = model.get_action([ob])[0]
-        next_ob, reward, done, _ = env.step(ac)
-        ob = next_ob
-        total_reward += reward
-    return total_reward
+        ac = np.resize(ac, [2])
+        print('(real action, predicted action) : ({}, {})'.format(action, ac))
+        next_ob, reward, done, action = env.step()
+        # for i in next_ob:
+        #     out.write(i)
+        if done:
+            break
+        else:
+            ob = next_ob
+            total_reward += reward
+    # out.release()
+    return total_reward, target_video
 
 
-def generate_expert_trajectory(env, num_envs):
+def generate_expert_trajectory(env, num_envs, render=False):
+    print("collect expert data...")
     obs = []
     acs = []
     target_videos = []
@@ -55,6 +75,8 @@ def generate_expert_trajectory(env, num_envs):
             if done:
                 break
             else:
+                if render:
+                    env.render()
                 obs.append(observation)
                 acs.append(action)
     # expert_obs, expert_acs
