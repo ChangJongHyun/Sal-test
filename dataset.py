@@ -11,12 +11,22 @@ from mpl_toolkits.mplot3d import Axes3D
 import pprint
 from custom_env.gym_my_env.envs.viewport import Viewport
 
+width = 3840
+height = 1920
+
 # all sequence -> 20s
 fps_list = {'01_PortoRiverside.mp4': 25, '02_Diner.mp4': 30, '03_PlanEnergyBioLab.mp4': 25,
             '04_Ocean.mp4': 30, '05_Waterpark.mp4': 30, '06_DroneFlight.mp4': 25, '07_GazaFishermen.mp4': 25,
             '08_Sofa.mp4': 24, '09_MattSwift.mp4': 30, '10_Cows.mp4': 24, '11_Abbottsford.mp4': 30,
             '12_TeatroRegioTorino.mp4': 30, '13_Fountain.mp4': 30, '14_Warship.mp4': 25, '15_Cockpit.mp4': 25,
             '16_Turtle.mp4': 30, '17_UnderwaterPark.mp4': 30, '18_Bar.mp4': 25, '19_Touvet.mp4': 30}
+
+
+def regular_action(action_data):
+    x_val, y_val = action_data
+    x_val = x_val if abs(x_val) > 0.01 else 0
+    y_val = y_val if abs(y_val) > 0.01 else 0
+    return x_val, y_val
 
 
 class Sal360:
@@ -43,7 +53,8 @@ class Sal360:
             if 99 == int(np_data[idx][0]):
                 action = (0, 0)
             else:
-                action = (np_data[idx + 1][1] - np_data[idx][1], np_data[idx + 1][2] - np_data[idx][1])
+                action = (np_data[idx + 1][2] - np_data[idx][2], np_data[idx + 1][1] - np_data[idx][1])
+                action = regular_action(action)
             actions.append(action)
 
         actions = np.array(actions)
@@ -100,12 +111,13 @@ class Sal360:
                 data.append([list(map(lambda x: [float(i) for i in x], list(row)[1:]))])
 
         np_data = np.array(data).reshape((-1, 7))
-
+        next_state = []
         for idx in range(len(np_data)):
             if np_data[idx][0] == 99.:
                 action = (0, 0)
             else:
-                action = (np_data[idx + 1][1] - np_data[idx][1], np_data[idx + 1][2] - np_data[idx][1])
+                action = (np_data[idx + 1][1] - np_data[idx][1], np_data[idx + 1][2] - np_data[idx][2])
+                action = regular_action(action)
             actions.append(action)
 
         actions = np.array(actions)
@@ -113,8 +125,8 @@ class Sal360:
         np_data = np_data.reshape((19, 57, 100, 7))
         actions = actions.reshape((19, 57, 100, 2))
 
-        _x_train, x_test = np_data[:14, :, :, :], np_data[14:, :, :, :]
-        _y_train, y_test = actions[:14, :, :, :], actions[14:, :, :, :]
+        _x_train, x_test = np_data[:14, :, :99, :], np_data[14:, :, :99, :]
+        _y_train, y_test = actions[:14, :, :99, :], actions[14:, :, :99, :]
         x_train, x_validation = _x_train[:, :45, :, :], _x_train[:, 45:, :, :]
         y_train, y_validation = _y_train[:, :45, :, :], _y_train[:, 45:, :, :]
 

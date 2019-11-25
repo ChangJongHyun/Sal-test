@@ -46,7 +46,7 @@ if __name__ == '__main__':
     validation_gen = DataGenerator.generator_for_batch(img_w, img_h, type='validation', normalize=False)
     test_gen = DataGenerator.generator_for_batch(img_w, img_h, type='test', normalize=False)
 
-    model = Networks.drqn(state_size, action_size, backbone='convLSTM')
+    model = Networks.drqn(state_size, action_size, backbone='2.5D')
     loss_arr = []
 
     hist = model.fit_generator(train_gen, epochs=10, verbose=1,

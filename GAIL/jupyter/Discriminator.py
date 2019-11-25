@@ -1,108 +1,122 @@
 import os
 
 import tensorflow as tf
+import numpy as np
+
+import GAIL.jupyter.tf_utils as U
+
+
+def logsigmoid(a):
+    '''Equivalent to tf.log(tf.sigmoid(a))'''
+    return -tf.nn.softplus(-a)
+
+
+""" Reference: https://github.com/openai/imitation/blob/99fbccf3e060b6e6c739bdf209758620fcdefd3c/policyopt/thutil.py#L48-L51"""
+def logit_bernoulli_entropy(logits):
+    ent = (1. - tf.nn.sigmoid(logits)) * logits - logsigmoid(logits)
+    return ent
 
 
 class Discriminator:
-    def __init__(self, sess, ob_shape, ac_shape, hidden_size, lr, name, isRNN=True, isTPU=False):
+    def __init__(self, sess, ob_shape, ac_shape, name, entcoeff=0.001, lr=1e-3, isRNN=True):
         self.sess = sess
         self.ob_shape = ob_shape
         self.ac_shape = ac_shape
-        self.hidden_size = hidden_size
+        self.num_actions = ac_shape[0]
         self.lr = lr
         self.name = name
         self.isRNN = isRNN
-        self.isTPU = isTPU
-        with tf.variable_scope('discriminator'):
-            # self.ob_ac = tf.placeholder(dtype=tf.float32, shape=[None, ob_shape[0] + ac_shape[0]])
-            self.expert_ob = tf.placeholder(dtype=tf.float32, shape=[None] + list(self.ob_shape))
-            self.expert_ac = tf.placeholder(dtype=tf.float32, shape=[None] + list(self.ac_shape))
 
-            self.agent_ob = tf.placeholder(dtype=tf.float32, shape=[None] + list(self.ob_shape))
-            self.agent_ac = tf.placeholder(dtype=tf.float32, shape=[None] + list(self.ac_shape))
-            with tf.variable_scope(name) as network_scope:
-                expert_prob = self._build_network(self.expert_ob, self.expert_ac)
-                network_scope.reuse_variables()  # share parameter
-                agent_prob = self._build_network(self.agent_ob, self.agent_ac)
+        self.build_ph()
+        # Build graph
+        generator_logits = self.build_graph(self.generator_obs_ph, self.generator_acs_ph, reuse=False)
+        expert_logits = self.build_graph(self.expert_obs_ph, self.expert_acs_ph, reuse=False)
 
-            with tf.variable_scope('loss'):
-                loss_expert = tf.reduce_mean(tf.log(tf.clip_by_value(expert_prob, 0.01, 1)))
-                loss_agent = tf.reduce_mean(tf.log(tf.clip_by_value(1 - agent_prob, 0.01, 1)))
-                loss = loss_expert + loss_agent
-                loss = -loss
-                self.loss_summary = tf.summary.scalar('discriminator_loss', loss)
+        # Build accuracy
+        generator_acc = tf.reduce_mean(tf.to_float(tf.nn.sigmoid(generator_logits) < 0.5))
+        expert_acc = tf.reduce_mean(tf.to_float(tf.nn.sigmoid(expert_logits) > 0.5))
+        # Build regression loss
+        # let x = logits, z = targes
+        # z * -log(sigmoid(x)) + (1-z) * -log(1-sigmoid(x))
+        generator_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=generator_logits,
+                                                                 labels=tf.zeros_like(generator_logits))
+        generator_loss = tf.reduce_mean(generator_loss)
+        expert_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=expert_logits,
+                                                              labels=tf.ones_like(expert_logits))
+        expert_loss = tf.reduce_mean(expert_loss)
 
-            with tf.name_scope('train_op'):
-                # grads = tf.gradients(loss, self.params())
-                # self.grads = list(zip(grads, self.params()))
-                self.train_op = tf.train.AdamOptimizer(self.lr).minimize(loss)
+        # Build entropy loss
+        logits = tf.concat([generator_logits, expert_logits], 0)
+        entropy = tf.reduce_mean(logit_bernoulli_entropy(logits=logits))
+        entropy_loss = -entcoeff * entropy
 
-            # log(P(expert|s,a)) larger is better for agent
-            self.rewards = tf.log(tf.clip_by_value(agent_prob, 1e-10, 1))
-            self.reward_summary = tf.summary.histogram('reward', self.rewards)
-            self.agent_prob_sum = tf.summary.histogram('agent_prob', agent_prob)
-            self.expert_prob_sum = tf.summary.histogram('expert_prob', expert_prob)
+        # Loss + Accuracy terms
+        self.total_loss = generator_loss + expert_loss + entropy_loss
+        self.train_op = tf.train.AdamOptimizer(self.lr).minimize(self.total_loss, var_list=self.get_trainable_variables())
 
-    def _build_network(self, ob, ac):
-        with tf.variable_scope('discriminator'):
+        # Build Reward for policy
+        self.reward_op = -tf.log(1 - tf.nn.sigmoid(generator_logits) + 1e-8)
+
+        generator_acc_summary = tf.summary.histogram('generator_acc', generator_acc)
+        expert_acc_summary = tf.summary.histogram('expert_acc', expert_acc)
+        total_loss_summary = tf.summary.scalar('total_loss', self.total_loss)
+
+        self.merged = tf.summary.merge([generator_acc_summary, expert_acc_summary, total_loss_summary])
+
+    def build_ph(self):
+        self.generator_obs_ph = tf.placeholder(tf.float32, [None] + self.ob_shape, name="observations_ph")
+        self.generator_acs_ph = tf.placeholder(tf.float32, [None] + self.ac_shape, name="actions_ph")
+        self.expert_obs_ph = tf.placeholder(tf.float32, [None] + self.ob_shape, name="expert_observations_ph")
+        self.expert_acs_ph = tf.placeholder(tf.float32, [None] + self.ac_shape, name="expert_actions_ph")
+
+    def build_graph(self, obs_ph, acs_ph, reuse=False):
+        with tf.variable_scope(self.name):
+            if reuse:
+                tf.get_variable_scope().reuse_variables()
+
+            # with tf.variable_scope('obfilter'):
+            #     self.obs_rms = RunningMeanStd(shape=self.obs_rms)
+            # leaky_relu = tf.keras.layers.LeakyReLU(0.2)
+            # initializer = tf.keras.initializers.RandomNormal(0, 0.02)
             if self.isRNN:
-                s_layer_1 = tf.keras.layers.ConvLSTM2D(64, 3, name='state_layer1', return_sequences=True)(ob)
-                s_batch_norm_1 = tf.keras.layers.BatchNormalization(name='state_batch_norm1')(s_layer_1)
+                x = tf.keras.layers.ConvLSTM2D(64, 3, 3, return_sequences=True)(obs_ph)
+                x = tf.keras.layers.BatchNormalization()(x)
+                x = tf.keras.layers.ConvLSTM2D(64, 3, 3, return_sequences=True)(x)
+                x = tf.keras.layers.BatchNormalization()(x)
+                x = tf.keras.layers.ConvLSTM2D(64, 3, 3, return_sequences=False)(x)
+                x = tf.keras.layers.BatchNormalization()(x)
+                x = tf.keras.layers.Flatten()(x)
 
-                s_layer_2 = tf.keras.layers.ConvLSTM2D(64, 3, name='state_layer2', return_sequences=True)(
-                    s_batch_norm_1)
-                s_batch_norm_2 = tf.keras.layers.BatchNormalization(name='state_batch_norm2')(s_layer_2)
+                y = tf.keras.layers.Dense(64, activation='tanh')(acs_ph)
 
-                s_layer_3 = tf.keras.layers.ConvLSTM2D(32, 3, name='state_layer3', return_sequences=False)(
-                    s_batch_norm_2)
-                s_batch_norm_3 = tf.keras.layers.BatchNormalization(name='state_batch_norm3')(s_layer_3)
-
-                s_flatten = tf.keras.layers.Flatten(name='state_flatten')(s_batch_norm_3)
-                x, y = tf.split(ac, [1, 1], 1)
-                a_layer_1 = tf.keras.layers.Dense(16, activation='relu', name='action_layer_x')(x)
-                a_layer_2 = tf.keras.layers.Dense(16, activation='relu', name='action_layer_y')(y)
-
-                concat = tf.keras.layers.concatenate([s_flatten, a_layer_1, a_layer_2], name='s_a_concat')
-
-                d_out = tf.keras.layers.Dense(1, activation=tf.nn.sigmoid, name='prob')(concat)
-                return d_out
+                transition = tf.concat([x, y], axis=1)
+                logits = tf.keras.layers.Dense(1)(transition)
             else:
-                s_layer_1 = tf.keras.layers.Conv3D(40, 3, name='state_layer1')(ob)
-                s_batch_norm_1 = tf.keras.layers.BatchNormalization(name='state_batch_norm1')(s_layer_1)
+                backbone = tf.keras.applications.mobilenet_v2.MobileNetV2(include_top=False,
+                                                                          weights=None,
+                                                                          pooling='max')
+                x = tf.keras.layers.TimeDistributed(backbone)(obs_ph)
+                x = tf.keras.layers.Flatten()(x)
 
-                s_layer_2 = tf.keras.layers.Conv3D(40, 3, name='state_layer2')(s_batch_norm_1)
-                s_batch_norm_2 = tf.keras.layers.BatchNormalization(name='state_batch_norm2')(s_layer_2)
+                y = tf.keras.layers.Dense(64, activation='tanh')(acs_ph)
 
-                s_layer_3 = tf.keras.layers.Conv3D(40, 3, name='state_layer3')(s_batch_norm_2)
-                s_batch_norm_3 = tf.keras.layers.BatchNormalization(name='state_batch_norm3')(s_layer_3)
+                transition = tf.concat([x, y], axis=1)
+                logits = tf.keras.layers.Dense(1)(transition)
 
-                s_flatten = tf.keras.layers.Flatten(name='state_flatten')(s_batch_norm_3)
+            return logits
 
-                x, y = tf.split(ac, [1, 1], 1)
-                a_layer_1 = tf.keras.layers.Dense(16, activation='relu', name='action_layer_x')(x)
-                a_layer_2 = tf.keras.layers.Dense(16, activation='relu', name='action_layer_y')(y)
+    def get_trainable_variables(self):
+        return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.name)
 
-                concat = tf.keras.layers.concatenate([s_flatten, a_layer_1, a_layer_2], name='s_a_concat')
+    def learn(self, writer, step, generator_obs, generator_acs, expert_obs, expert_acs):
+        feed_dict = {self.generator_obs_ph: generator_obs,
+                     self.generator_acs_ph: generator_acs,
+                     self.expert_obs_ph: expert_obs,
+                     self.expert_acs_ph: expert_acs}
+        _, summary = self.sess.run([self.train_op, self.merged], feed_dict)
+        writer.add_summary(summary, step)
 
-                d_out = tf.keras.layers.Dense(1, name='prob')(concat)
-                return d_out
-
-    def params(self):
-        return tf.global_variables(os.path.join('discriminator', self.name)).copy()
-
-    def get_reward(self, agent_ob, agent_ac):
-        feed_dict = {self.agent_ob: agent_ob,
-                     self.agent_ac: agent_ac}
-
-        return self.sess.run(self.rewards, feed_dict=feed_dict)
-
-    def update(self, writer, step, expert_ob, expert_ac, agent_ob, agent_ac):
-        feed_dict = {self.expert_ob: expert_ob,
-                     self.expert_ac: expert_ac,
-                     self.agent_ob: agent_ob,
-                     self.agent_ac: agent_ac}
-
-        merged = tf.summary.merge([self.loss_summary, self.reward_summary, self.agent_prob_sum, self.expert_prob_sum])
-        op_list = [self.train_op, merged]
-        _, summ = self.sess.run(op_list, feed_dict=feed_dict)
-        writer.add_summary(summ, step)
+    def get_reward(self, obs, acs):
+        feed_dict = {self.generator_obs_ph: obs, self.generator_acs_ph: acs}
+        reward = self.sess.run(self.reward_op, feed_dict)
+        return reward

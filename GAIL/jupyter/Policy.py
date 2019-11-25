@@ -20,15 +20,31 @@ class ActorCritic:
             self._build_network()
 
     def _build_network(self):
+        initializer = tf.keras.initializers.RandomNormal(0, 0.02)
         with tf.variable_scope('critic'):
             if self.isRNN:
-                s_layer_1 = tf.keras.layers.ConvLSTM2D(32, 3, name='state_layer1', return_sequences=True)(self.obs)
+                s_layer_1 = tf.keras.layers.ConvLSTM2D(128, 3, 3, name='state_layer1',
+                                                       activation='relu',
+                                                       recurrent_initializer=initializer,
+                                                       kernel_initializer=initializer,
+                                                       bias_initializer=initializer,
+                                                       return_sequences=True)(self.obs)
                 s_batch_norm_1 = tf.keras.layers.BatchNormalization(name='state_batch_norm1')(s_layer_1)
 
-                s_layer_2 = tf.keras.layers.ConvLSTM2D(32, 3, name='state_layer2', return_sequences=True)(s_batch_norm_1)
+                s_layer_2 = tf.keras.layers.ConvLSTM2D(64, 3, 3, name='state_layer2',
+                                                       activation='relu',
+                                                       recurrent_initializer=initializer,
+                                                       kernel_initializer=initializer,
+                                                       bias_initializer=initializer,
+                                                       return_sequences=True)(s_batch_norm_1)
                 s_batch_norm_2 = tf.keras.layers.BatchNormalization(name='state_batch_norm2')(s_layer_2)
 
-                s_layer_3 = tf.keras.layers.ConvLSTM2D(32, 3, name='state_layer3', return_sequences=False)(s_batch_norm_2)
+                s_layer_3 = tf.keras.layers.ConvLSTM2D(32, 3, 3, name='state_layer3',
+                                                       activation='relu',
+                                                       recurrent_initializer=initializer,
+                                                       kernel_initializer=initializer,
+                                                       bias_initializer=initializer,
+                                                       return_sequences=False)(s_batch_norm_2)
                 s_batch_norm_3 = tf.keras.layers.BatchNormalization(name='state_batch_norm3')(s_layer_3)
 
                 s_flatten = tf.keras.layers.Flatten(name='state_flatten')(s_batch_norm_3)
@@ -36,41 +52,59 @@ class ActorCritic:
                 c_out = tf.keras.layers.Dense(1, name='c_out', activation=None)(s_flatten)
 
             else:
-                s_layer_1 = tf.keras.layers.Conv3D(32, 3, name='state_layer1')(self.obs)
-                s_layer_2 = tf.keras.layers.Conv3D(32, 3, name='state_layer2')(s_layer_1)
-                s_layer_3 = tf.keras.layers.Conv3D(32, 3, name='state_layer2')(s_layer_2)
-                s_flatten = tf.keras.layers.Flatten(name='state_flatten')(s_layer_3)
-                c_out = tf.keras.layers.Dense(1, name='c_out', activation=None)(s_flatten)
+                backbone = tf.keras.applications.mobilenet_v2.MobileNetV2(include_top=False,
+                                                                          weights=None,
+                                                                          pooling='max')
+                x = tf.keras.layers.TimeDistributed(backbone)(self.obs)
+                x = tf.keras.layers.Flatten()(x)
+                c_out = tf.keras.layers.Dense(1, name='c_out')(x)
 
         with tf.variable_scope('actor'):
             if self.isRNN:
-                s_layer_1 = tf.keras.layers.ConvLSTM2D(32, 3, name='state_layer1', return_sequences=True)(self.obs)
+                s_layer_1 = tf.keras.layers.ConvLSTM2D(128, 3, 3, name='state_layer1',
+                                                       activation='relu',
+                                                       recurrent_initializer=initializer,
+                                                       kernel_initializer=initializer,
+                                                       bias_initializer=initializer,
+                                                       return_sequences=True)(self.obs)
                 s_batch_norm_1 = tf.keras.layers.BatchNormalization(name='state_batch_norm1')(s_layer_1)
 
-                s_layer_2 = tf.keras.layers.ConvLSTM2D(32, 3, name='state_layer2', return_sequences=True)(s_batch_norm_1)
+                s_layer_2 = tf.keras.layers.ConvLSTM2D(64, 3, 3, name='state_layer2',
+                                                       activation='relu',
+                                                       recurrent_initializer=initializer,
+                                                       kernel_initializer=initializer,
+                                                       bias_initializer=initializer,
+                                                       return_sequences=True)(s_batch_norm_1)
                 s_batch_norm_2 = tf.keras.layers.BatchNormalization(name='state_batch_norm2')(s_layer_2)
 
-                s_layer_3 = tf.keras.layers.ConvLSTM2D(32, 3, name='state_layer3', return_sequences=False)(s_batch_norm_2)
+                s_layer_3 = tf.keras.layers.ConvLSTM2D(32, 3, 3, name='state_layer3',
+                                                       activation='relu',
+                                                       recurrent_initializer=initializer,
+                                                       kernel_initializer=initializer,
+                                                       bias_initializer=initializer,
+                                                       return_sequences=False)(s_batch_norm_2)
                 s_batch_norm_3 = tf.keras.layers.BatchNormalization(name='state_batch_norm3')(s_layer_3)
 
                 s_flatten = tf.keras.layers.Flatten(name='state_flatten')(s_batch_norm_3)
 
-                a_out = tf.keras.layers.Dense(self.num_ac, name='a_out', activation='tanh')(s_flatten)
+                a_out = tf.keras.layers.Dense(self.num_ac, name='a_out')(s_flatten)
 
             else:
-                s_layer_1 = tf.keras.layers.Conv3D(32, 3, name='state_layer1')(self.obs)
-                s_layer_2 = tf.keras.layers.Conv3D(32, 3, name='state_layer2')(s_layer_1)
-                s_layer_3 = tf.keras.layers.Conv3D(32, 3, name='state_layer2')(s_layer_2)
-                s_flatten = tf.keras.layers.Flatten(name='state_flatten')(s_layer_3)
-                a_out = tf.keras.layers.Dense(self.num_ac, name='a_out', activation='tanh')(s_flatten)
+                backbone = tf.keras.applications.mobilenet_v2.MobileNetV2(include_top=False,
+                                                                          weights=None,
+                                                                          pooling='max')
+                x = tf.keras.layers.TimeDistributed(backbone)(self.obs)
+                x = tf.keras.layers.Flatten()(x)
+                c_out = tf.keras.layers.Dense(self.num_ac, name='c_out')(x)
 
-            log_std = tf.get_variable('log_std', [1, self.num_ac], dtype=tf.float32,
+        log_std = tf.get_variable('log_std', [1, self.num_ac], dtype=tf.float32,
                                       initializer=tf.constant_initializer(self.init_std),
                                       trainable=self.trainable)
 
         std = tf.exp(log_std)
 
         # loc --> mean, scale --> standard deviation
+        # self.action = a_out
         a_dist = dist.Normal(loc=a_out, scale=std)
         self.log_prob = a_dist.log_prob(self.acs)
         self.entropy = tf.reduce_mean(a_dist.entropy())

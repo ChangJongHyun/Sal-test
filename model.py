@@ -116,9 +116,9 @@ class Networks(object):
             conv3d_analysis1 = Conv3D(filters=40, kernel_size=3, strides=3, padding='same')(temporal)
             conv3d_analysis2 = Conv3D(filters=40, kernel_size=3, strides=3, padding='same')(conv3d_analysis1)
             output = Flatten()(conv3d_analysis2)
-            output = Dense(action_size, activation='linear')(output)
+            output = Dense(action_size, activation='tanh')(output)
             model = Model(inputs=img_input, output=output)
-            model.compile(loss='mose', optimizer='adam')
+            model.compile(loss=keras.losses.binary_crossentropy, optimizer='adam')
 
         else:
             raise ValueError("invalid value")
@@ -195,7 +195,7 @@ class GAIL():
     # PI(s, a) - actor
     def build_policy(self, state_input, action_input):
         policy_network = self.construct_network(state_input, action_input)
-        
+
     # Q(s, a) - critic
     def build_value(self, state_input, action_input):
         value_network = self.construct_network(state_input, action_input)

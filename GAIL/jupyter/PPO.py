@@ -3,7 +3,8 @@ from GAIL.jupyter.Policy import ActorCritic
 
 
 class PPO:
-    def __init__(self, sess, ob_shape, ac_shape, lr, hidden_size, eps=0.2, v_coeff=0.5, ent_coeff=0.01, isRNN=True):
+    def __init__(self, sess, ob_shape, ac_shape, lr, hidden_size, name="ppo", eps=0.2, v_coeff=0.5, ent_coeff=0.01,
+                 isRNN=True):
         self.sess = sess
         self.ob_shape = ob_shape
         self.ac_shape = ac_shape
@@ -13,7 +14,8 @@ class PPO:
         self.v_coeff = v_coeff
         self.ent_coeff = ent_coeff
         self.isRNN = isRNN
-        self._create_ppo_graph()
+        with tf.variable_scope(name):
+            self._create_ppo_graph()
 
     def _create_ppo_graph(self):
         self.obs = tf.placeholder(dtype=tf.float32, shape=[None] + self.ob_shape, name='observation')
@@ -21,8 +23,10 @@ class PPO:
         self.returns = tf.placeholder(dtype=tf.float32, shape=[None, 1])
         self.advs = tf.placeholder(dtype=tf.float32, shape=[None, 1])
 
-        self.pi = ActorCritic(self.sess, self.obs, self.acs, self.hidden_size, 'new_pi', trainable=True, isRNN=self.isRNN)
-        self.old_pi = ActorCritic(self.sess, self.obs, self.acs, self.hidden_size, 'old_pi', trainable=False, isRNN=self.isRNN)
+        self.pi = ActorCritic(self.sess, self.obs, self.acs, self.hidden_size, 'new_pi', trainable=True,
+                              isRNN=self.isRNN)
+        self.old_pi = ActorCritic(self.sess, self.obs, self.acs, self.hidden_size, 'old_pi', trainable=False,
+                                  isRNN=self.isRNN)
 
         self.pi_param = self.pi.params()
         self.old_pi_param = self.old_pi.params()
@@ -45,9 +49,7 @@ class PPO:
             self.PPO_loss_summary = tf.summary.scalar('PPO_loss', self.loss)
 
         with tf.name_scope('train_op'):
-            grads = tf.gradients(self.loss, self.pi_param)
-            self.grads = list(zip(grads, self.pi_param))
-            self.train_op = tf.train.AdamOptimizer(self.lr).apply_gradients(self.grads)
+            self.train_op = tf.train.AdamOptimizer(self.lr).minimize(self.loss)
 
     def get_action(self, obs):
         return self.sess.run(self.pi.action, feed_dict={self.obs: obs})
