@@ -19,11 +19,10 @@ class Viewport:
         # (x0, x1, y0, y1)
         self.VIDEO_WIDTH = int(width)
         self.VIDEO_HEIGHT = int(height)
-        self.width = self.center[0] * self.fov * 2
-        self.height = self.center[1] * self.fov * 2
+        self.width = int(self.VIDEO_WIDTH * self.fov / 2)
+        self.height = int(self.VIDEO_HEIGHT * self.fov / 2)
         self.view_dict = {"left": None, "right": None}
         self.view = None
-        self.is_split = self.split()
         self.update()
         self._build_view()
         self.point = []
@@ -49,42 +48,30 @@ class Viewport:
         return tiles
 
     def _build_view(self):
-        self.view = np.array([self.center[0] - self.width / 2, self.center[0] + self.width / 2,
-                              self.center[1] - self.height / 2, self.center[1] + self.height / 2], dtype=np.int16)
-        self.build_y(self.view)
-        if self.is_split[0]:
-            self.view_dict["left"], self.view_dict["right"] = self.build_x(self.is_split[1], self.view)
-            for k in self.view_dict:
-                self.view_dict[k] = np.append(self.view_dict[k], self.view[2:4], 0)
-                self.view_dict[k].astype(np.int16)
-            self.view = None
+        self.view = [self.center[0] - self.width, self.center[0] + self.width,
+                     self.center[1] - self.height, self.center[1] + self.height]
+        # set Y
+        self.view[2] = self.view[2] if self.view[2] >= 0 else 0
+        self.view[3] = self.view[3] if self.view[3] <= self.VIDEO_HEIGHT else self.VIDEO_HEIGHT
 
-    def build_x(self, v, view):
-        if v:  # 왼쪽이 넘어간경우
-            l = [self.VIDEO_WIDTH + view[0], self.VIDEO_WIDTH]
-            r = [0, view[1]]
-        else:  # 오른쪽이 넘어간 경우
-            l = [view[0], self.VIDEO_WIDTH]
-            r = [0, view[1] - self.VIDEO_WIDTH]
-        return l, r
-
-    def build_y(self, view):
-        view[2] = 0 if view[2] < 0 else view[2]
-        view[3] = self.VIDEO_HEIGHT if view[3] > self.VIDEO_HEIGHT else view[3]
-
-    def split(self):
-        if self.center[0] < self.width / 2:
-            return True, 1  # 왼쪽이 넘어간경우
-        elif self.VIDEO_WIDTH - self.center[0] < self.width / 2:
-            return True, 0  # 오른쪽이 넘어간경우
+        # set X
+        if self.view[0] < 0:
+            left = [self.VIDEO_WIDTH + self.view[0], self.VIDEO_WIDTH] + self.view[2:]
+            right = [0, self.view[1]] + self.view[2:]
+        elif self.view[1] > self.VIDEO_WIDTH:
+            left = [self.view[0], self.VIDEO_WIDTH] + self.view[2:]
+            right = [0, self.view[1] - self.VIDEO_WIDTH] + self.view[2:]
         else:
-            return False, -1
+            self.view = [int(i) for i in self.view]
+            return
+        self.view_dict['left'], self.view_dict['right'] = np.array(left, dtype=np.int), np.array(right, dtype=np.int)
+        self.view = None
 
     def get_view(self, frame):
-        if self.view is not None:
-            return frame[self.view[2]:self.view[3], self.view[0]:self.view[1]]
-        else:
+        if self.view is None:
             return merge(self.view_dict["left"], self.view_dict["right"], frame)
+        else:
+            return frame[self.view[2]:self.view[3], self.view[0]:self.view[1]]
 
     def get_rectangle_point(self):
         # form --> (x1, y1), (x2, y2)
@@ -99,7 +86,8 @@ class Viewport:
 
     # move --> [x,x] 2x1 vector
     def move(self, v):
-        assert len(v) is 2, "input vector size must 2"
+        v = np.reshape(v, [2])
+        v[0], v[1] = v[0] * self.VIDEO_WIDTH, v[1] * self.VIDEO_HEIGHT
         self.center[0] += v[0]
         self.center[1] += v[1]
         self.update()
@@ -107,19 +95,18 @@ class Viewport:
 
     def update(self):
         if self.center[0] < 0:
-            self.center[0] = self.VIDEO_WIDTH + self.center[0]
+            self.center[0] += self.VIDEO_WIDTH
         elif self.center[0] > self.VIDEO_WIDTH:
-            self.center[0] = self.center[0] - self.VIDEO_WIDTH
+            self.center[0] -= self.center[0]
 
         if self.center[1] < 0:
             self.center[1] = 0
         elif self.center[1] > self.VIDEO_HEIGHT:
             self.center[1] = self.VIDEO_HEIGHT
+        self.center = [int(i) for i in self.center]
 
-        self.is_split = self.split()
-
-    def set_center(self, c):
-        assert isinstance(c, np.ndarray)
-        self.center = c
-        self.update()
+    def set_center(self, c, normalize=False):
+        if normalize:
+            c = c[0] * self.VIDEO_WIDTH, c[1] * self.VIDEO_HEIGHT
+        self.center = np.array(c)
         self._build_view()

@@ -111,7 +111,11 @@ class Sal360:
                 data.append([list(map(lambda x: [float(i) for i in x], list(row)[1:]))])
 
         np_data = np.array(data).reshape((-1, 7))
-        next_state = []
+        # np_data = [i[6] - i[5] for i in np_data]
+        # np4 = [i == 4.0 for i in np_data] 5 --> 34336
+        # np5 = [i == 5.0 for i in np_data] 6 --> 42542
+        # np6 = [i == 6.0 for i in np_data] 7 --> 6
+        # np7 = [i == 7.0 for i in np_data] 8 --> 7
         for idx in range(len(np_data)):
             if np_data[idx][0] == 99.:
                 action = (0, 0)
@@ -123,6 +127,7 @@ class Sal360:
         actions = np.array(actions)
 
         np_data = np_data.reshape((19, 57, 100, 7))
+
         actions = actions.reshape((19, 57, 100, 2))
 
         _x_train, x_test = np_data[:14, :, :99, :], np_data[14:, :, :99, :]
@@ -344,6 +349,7 @@ class DataGenerator:
         width, height = list(map(lambda x: int(x), resolution.split('x')))
         view = Viewport(width, height)
         x_dict, y_dict = gen[0], gen[1]
+
         while True:
             """ random video select """
             video = random.choice(videos)

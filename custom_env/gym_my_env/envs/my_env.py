@@ -1,5 +1,6 @@
 import os
 import random
+import time
 
 import tensorflow as tf
 import gym
@@ -8,13 +9,12 @@ import numpy as np
 import cv2
 
 from custom_env.gym_my_env.envs.viewport import Viewport
-from dataset import DataGenerator, Sal360
-from GAIL.jupyter.utils import *
-
+from dataset import Sal360
+from DDPG.utils import get_SalMap_info, read_SalMap
 
 n_samples = 1
-width = 224
-height = 224
+width = 112
+height = 112
 n_channels = 3
 
 
@@ -35,8 +35,12 @@ class MyEnv(gym.Env):
 
         self.cap = None  # video input
         self.view = None  # viewport's area / current state
+        self.saliency_view = None
         self.observation = None
+        self.observation_origin = None
         self.mode = None
+        self.saliency_info = get_SalMap_info()
+
         self.set_dataset()
 
     def set_dataset(self, type='train'):
@@ -58,41 +62,36 @@ class MyEnv(gym.Env):
         self.mode = type
 
     # return -> observation, reward, done(bool), info
-    def step(self, action=None, test=False):
+    def step(self, action=None):
         try:
             x_data, y_data = next(self.x_iter), next(self.y_iter)
-            temp_y = [0] * 4
         except StopIteration:
             return None, None, True, None
+        lat, lng, start_frame, end_frame = x_data[2], x_data[1], int(x_data[5]), int(x_data[6])
 
-        frame_idx = int(x_data[6] - x_data[5])
-        frames = []
-        ret = None
-
-        for i in range(frame_idx):
-            ret, frame = self.cap.read()
-            if ret:
-                if action is None:
-                    w, h = x_data[2] * self.width, x_data[1] * self.height
-                    self.view.set_center(np.array([w, h]))
-                else:
-                    self.view.move((action[0] * self.width, action[1] * self.height))
-                frame = self.view.get_view(frame)
-                try:
-                    frame = cv2.resize(frame, (width, height))
-                    # frame = standardizaation_frame(frame)
-                    frames.append(frame)
-                except Exception as e:
-                    pass
-            else:
-                self.cap.release()
-                return None, 0, not ret, None
-        if len(frames) < 1:
-            return None, 0, True, None
+        if action is None:
+            self.view.set_center((lat, lng), normalize=True)
+            self.saliency_view.set_center((lat, lng), normalize=True)
         else:
-            self.observation = frames
-            yy = find_direction(y_data)
-            return self.observation, 0, not ret, ((x_data[2], x_data[1]), y_data)
+            self.view.move(action)
+            self.saliency_view.move(action)
+
+        self.observation = [cv2.resize(self.view.get_view(f), (width, height), interpolation=cv2.INTER_AREA) for f in
+                            self.video[start_frame - 1:end_frame]]
+        self.observation_origin = [self.view.get_view(f) for f in self.video[start_frame-1:end_frame]]
+        saliency_observation = [self.saliency_view.get_view(f) for f in self.saliency[start_frame - 1:end_frame]]
+        total_sum = np.sum(self.saliency[start_frame - 1:end_frame])
+        observation_sum = np.sum(saliency_observation)
+        reward = observation_sum / total_sum
+
+        # if reward < 0.05:
+        #     reward += -1
+        # elif reward > 0.25:
+        #     reward += 1
+
+        if len(self.observation) != 6:
+            self.observation = normalize(self.observation)
+        return self.observation, reward, False, ((x_data[2], x_data[1]), y_data)
 
     # 나중에 여러개의 영상을 학습하려면 iterate하게 영상을 선택하도록 g바꿔야함.
     def reset(self, target_video=None, set_data='train'):
@@ -104,18 +103,61 @@ class MyEnv(gym.Env):
         self.cap = cv2.VideoCapture(os.path.join(self.video_path, target_video))
         self.x_iter, self.y_iter = iter(random_x), iter(random_y)
         self.view = Viewport(self.width, self.height)
-        # print('start video: ', target_video)
-        return target_video
+        self.saliency_view = Viewport(self.saliency_info[target_video][1], self.saliency_info[target_video][2])
+        self.video = []
+        try:
+            self.saliency = read_SalMap(self.saliency_info[target_video])
+        except ValueError:
+            print("Cannot find saliency map " + target_video + "... reset environmnet!")
+            return self.reset()
+        while True:
+            ret, frame = self.cap.read()
+            if ret:
+                self.video.append(frame)
+            else:
+                self.cap.release()
+                break
+        x_data, y_data = next(self.x_iter), next(self.y_iter)
+        lat, lng, start_frame, end_frame = x_data[2], x_data[1], int(x_data[5]), int(x_data[6])
+        self.view.set_center((lat, lng), normalize=True)
+        self.observation = [cv2.resize(self.view.get_view(f), (width, height), interpolation=cv2.INTER_AREA) for f in
+                            self.video[start_frame - 1:end_frame]]
+        self.observation_origin = [self.view.get_view(f) for f in self.video[start_frame-1:end_frame]]
+        if len(self.observation) != 6:
+            self.observation = normalize(self.observation)
+        return self.observation, target_video
 
     def render(self):
-        for frame in self.observation:
-            cv2.imshow("video", frame)
-            # "q" --> stop and print info
+        for o,f  in zip(self.observation, self.observation_origin):
+            cv2.imshow("video", o)
+            cv2.imshow('origin', f)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
+
+
+def normalize(obs):
+    if len(obs) < 6:
+        for i in range(6 - len(obs)):
+            obs = np.concatenate([obs, [obs[-1]]])
+        return obs
+    elif len(obs) > 6:
+        obs = obs[:6]
+        return obs
+    else:
+        return obs
 
 
 # test agent
 if __name__ == '__main__':
     env = gym.make("my-env-v0")
-    expert_ob, expert_ac, videos = generate_expert_trajectory(env, 10, render=True)
+    env.reset()
+    while True:
+        obs, _, done, _ = env.step()
+        if done:
+            env.reset()
+            continue
+        else:
+            for f in obs:
+                cv2.imshow('test', f)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
