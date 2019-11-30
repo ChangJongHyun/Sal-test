@@ -37,7 +37,6 @@ class MyEnv(gym.Env):
         self.view = None  # viewport's area / current state
         self.saliency_view = None
         self.observation = None
-        self.observation_origin = None
         self.mode = None
         self.saliency_info = get_SalMap_info()
 
@@ -78,11 +77,14 @@ class MyEnv(gym.Env):
 
         self.observation = [cv2.resize(self.view.get_view(f), (width, height), interpolation=cv2.INTER_AREA) for f in
                             self.video[start_frame - 1:end_frame]]
-        self.observation_origin = [self.view.get_view(f) for f in self.video[start_frame-1:end_frame]]
+
+        """saliency mode"""
         saliency_observation = [self.saliency_view.get_view(f) for f in self.saliency[start_frame - 1:end_frame]]
+
         total_sum = np.sum(self.saliency[start_frame - 1:end_frame])
         observation_sum = np.sum(saliency_observation)
         reward = observation_sum / total_sum
+        """end saliency mode"""
 
         # if reward < 0.05:
         #     reward += -1
@@ -91,7 +93,7 @@ class MyEnv(gym.Env):
 
         if len(self.observation) != 6:
             self.observation = normalize(self.observation)
-        return self.observation, reward, False, ((x_data[2], x_data[1]), y_data)
+        return self.observation, reward, False, y_data
 
     # 나중에 여러개의 영상을 학습하려면 iterate하게 영상을 선택하도록 g바꿔야함.
     def reset(self, target_video=None, set_data='train'):
@@ -103,13 +105,15 @@ class MyEnv(gym.Env):
         self.cap = cv2.VideoCapture(os.path.join(self.video_path, target_video))
         self.x_iter, self.y_iter = iter(random_x), iter(random_y)
         self.view = Viewport(self.width, self.height)
-        self.saliency_view = Viewport(self.saliency_info[target_video][1], self.saliency_info[target_video][2])
         self.video = []
+        """saliency mode"""
+        self.saliency_view = Viewport(self.saliency_info[target_video][1], self.saliency_info[target_video][2])
         try:
             self.saliency = read_SalMap(self.saliency_info[target_video])
         except ValueError:
             print("Cannot find saliency map " + target_video + "... reset environmnet!")
             return self.reset()
+        """end saliency mode"""
         while True:
             ret, frame = self.cap.read()
             if ret:
@@ -117,19 +121,19 @@ class MyEnv(gym.Env):
             else:
                 self.cap.release()
                 break
+
+        """initial state"""
         x_data, y_data = next(self.x_iter), next(self.y_iter)
         lat, lng, start_frame, end_frame = x_data[2], x_data[1], int(x_data[5]), int(x_data[6])
         self.view.set_center((lat, lng), normalize=True)
         self.observation = [cv2.resize(self.view.get_view(f), (width, height), interpolation=cv2.INTER_AREA) for f in
                             self.video[start_frame - 1:end_frame]]
-        self.observation_origin = [self.view.get_view(f) for f in self.video[start_frame-1:end_frame]]
         if len(self.observation) != 6:
             self.observation = normalize(self.observation)
-        return self.observation, target_video
+        return self.observation, y_data, target_video
 
     def render(self):
-        for o,f  in zip(self.observation, self.observation_origin):
-            cv2.imshow("video", o)
+        for f in self.observation:
             cv2.imshow('origin', f)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
@@ -145,19 +149,3 @@ def normalize(obs):
         return obs
     else:
         return obs
-
-
-# test agent
-if __name__ == '__main__':
-    env = gym.make("my-env-v0")
-    env.reset()
-    while True:
-        obs, _, done, _ = env.step()
-        if done:
-            env.reset()
-            continue
-        else:
-            for f in obs:
-                cv2.imshow('test', f)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break

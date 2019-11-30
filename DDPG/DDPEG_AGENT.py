@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import tensorflow as tf
 from DDPG.DDPG_model import DDPG
@@ -10,7 +12,7 @@ from custom_env.gym_my_env.envs.my_env import MyEnv
 train_step = 50_000
 test_step = 1000
 
-minibatch_size = 16
+minibatch_size = 100
 pre_train_step = 3
 max_step_per_episode = 600
 
@@ -30,12 +32,13 @@ class Agent:
         self.obs_dim = observation_dim(env.observation_space)
         self.action_max = 1  ### KH: DDPG action bound
         self.action_min = -1  ### KH: DDPG action bound
-        self.model = self.set_model()
+        self.model = self.set_model('model/DDPG_POLICY/model_ddpg_10.ckpt')
         self.replay_buffer = ReplayBuffer(minibatch_size=minibatch_size)
 
-    def set_model(self):
+    def set_model(self, load_path=None):
         # model can be q-table or q-network
-        model = DDPG(self.sess, self.obs_dim, self.action_dim, self.action_max, self.action_min, isRNN=True)
+        model = DDPG(self.sess, self.obs_dim, self.action_dim, self.action_max, self.action_min, isRNN=True,
+                     load=load_path)
         return model
 
     def learn(self):
@@ -43,7 +46,6 @@ class Agent:
 
         global_step = 0
         episode_num = 0
-
         while global_step < train_step:
 
             episode_num += 1
@@ -52,26 +54,26 @@ class Agent:
                 break
 
             step_in_ep = 0
-            obs, target_video = self.env.reset()  # Reset environment
-
             total_reward = 0
             done = False
             self.noise = np.zeros([2])
 
+            obs, acs, target_video = self.env.reset()  # Reset environment
             # max_step_per_episode = 200,
             while not done and step_in_ep < max_step_per_episode and global_step < train_step:  ### KH: reset every 200 steps
 
                 global_step += 1
                 step_in_ep += 1
                 action = self.get_action(obs, global_step)
-
                 action = np.reshape(action, [2])
                 obs_next, reward, done, _ = self.env.step(action)
 
                 if done:
                     break
                 else:
-                    self.train_agent(obs, action, [reward], obs_next, done, global_step)
+                    actor_loss, critic_loss = self.train_agent(obs, acs, [reward], obs_next, done, global_step)
+                    with open(os.path.join('log_ddpg','log.txt'), "w") as f:
+                        f.write("[ actor_loss: {}, critic_loss: {}]".format(actor_loss, critic_loss))
 
                     # GUI
                     # self.env.render()
@@ -79,8 +81,9 @@ class Agent:
                     obs = obs_next
                     total_reward += reward
 
+            self.model.reset_state()
             if episode_num is not 0 and episode_num % 10 == 0:
-                self.model.save('./model/DDPG/model_ddpg_', episode_num)
+                self.model.save('./model/DDPG_POLICY', episode_num)
 
             print("[ target video: {}, train_ep: {}, total reward: {} ]".format(target_video, episode_num,
                                                                                 total_reward))  ### KH: train result
@@ -97,7 +100,7 @@ class Agent:
             episode_num += 1
             step_in_ep = 0
 
-            obs = self.env.reset()  # Reset environment
+            obs, acs, target_video = self.env.reset()  # Reset environment
             total_reward = 0  ### KH: Added missing
             done = False
 
@@ -106,17 +109,18 @@ class Agent:
 
                 global_step += 1
                 step_in_ep += 1
-                print(np.shape(obs))
                 action = self.get_action(obs, global_step, False)
-                obs_next, reward, done, _ = self.env.step(action)
+                print(action)
+                obs_next, reward, done, acs_ = self.env.step()
 
                 # GUI
-                # self.env.render()
+                self.env.render()
 
                 obs = obs_next
-                total_reward += reward
+                # total_reward += reward
 
-            print("[ test_ep: {}, total reward: {} ]".format(episode_num, total_reward))  ### KH: test result
+            print("[ target_video: {}, test_ep: {}, total reward: {} ]".format(target_video, episode_num,
+                                                                               total_reward))  ### KH: test result
 
     def get_action(self, obs, global_step, train=True):
         # 최적의 액션 선택 + Exploration (Epsilon greedy)
@@ -138,16 +142,18 @@ class Agent:
         obs = np.array(obs) / 255.
         obs_next = np.array(obs_next) / 255.
 
-        self.replay_buffer.add_to_memory((obs, action, reward, obs_next, done))
+        # self.replay_buffer.add_to_memory((obs, action, reward, obs_next, done))
+        #
+        # if len(self.replay_buffer.replay_memory) < minibatch_size * pre_train_step:
+        #     return None
+        #
+        # minibatch = self.replay_buffer.sample_from_memory()
+        # s, a, r, ns, d = map(np.array, zip(*minibatch))
+        # self.model.update(step, s, a, r, ns, d)
 
-        if len(self.replay_buffer.replay_memory) < minibatch_size * pre_train_step:
-            return None
+        actor_loss, critic_loss = self.model.update(step, [obs], [action], [reward], [obs_next], done)
 
-        minibatch = self.replay_buffer.sample_from_memory()
-        s, a, r, ns, d = map(np.array, zip(*minibatch))
-        self.model.update(step, s, a, r, ns, d)
-
-        return None
+        return actor_loss, critic_loss
 
     def ou_noise(self, x):
         return x + theta * (mu - x) + sigma * np.random.randn(2)
@@ -160,11 +166,21 @@ if __name__ == '__main__':
 
     # Load agent
     print('Agent: ddpg')
-    tf.debugging.set_log_device_placement(True)
-    # gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.9)
+
+    # gpus = tf.config.experimental.list_physical_devices('GPU')
+    #
+    # if gpus:
+    #     try:
+    #         tf.config.experimental.set_virtual_device_configuration(gpus[0],
+    #                                                                 [tf.config.experimental.VirtualDeviceConfiguration(
+    #                                                                     memory_limit=1024 * 9)])
+    #     except RuntimeError as e:
+    #         pass
+
     sess = tf.Session()
+
     agent = Agent(env, sess)
 
     # start learning and testing
     agent.learn()
-    agent.test()
+    # agent.test()
