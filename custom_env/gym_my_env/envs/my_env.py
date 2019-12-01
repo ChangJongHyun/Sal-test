@@ -93,13 +93,14 @@ class MyEnv(gym.Env):
 
         if len(self.observation) != 6:
             self.observation = normalize(self.observation)
-        return self.observation, reward, False, y_data
+        return self.observation, reward, False, (lat, lng)
 
     # 나중에 여러개의 영상을 학습하려면 iterate하게 영상을 선택하도록 g바꿔야함.
     def reset(self, target_video=None, set_data='train'):
         self.set_dataset(set_data)
         if target_video is None:
             target_video = random.choice(self.target_videos)
+        target_video = "10_Cows.mp4"
         random_idx = random.randint(0, len(self.x_dict[target_video]) - 1)
         random_x, random_y = self.x_dict[target_video][random_idx], self.y_dict[target_video][random_idx]
         self.cap = cv2.VideoCapture(os.path.join(self.video_path, target_video))

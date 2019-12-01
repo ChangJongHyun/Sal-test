@@ -120,33 +120,11 @@ class DDPG:
                 x = self.critic_s_layer_1(x)
             s_batch_norm_1 = tf.keras.layers.BatchNormalization(name='state_batch_norm1', trainable=trainable)(x)
 
-            # s_layer_2 = tf.keras.layers.ConvLSTM2D(16, 3, name='state_layer2', return_sequences=True, stateful=True,
-            #                                        trainable=trainable)(s_batch_norm_1)
-            # s_batch_norm_2 = tf.keras.layers.BatchNormalization(name='state_batch_norm2', trainable=trainable)(
-            #     s_layer_2)
-            #
-            # s_layer_3 = tf.keras.layers.ConvLSTM2D(16, 3, name='state_layer3', return_sequences=False, stateful=True,
-            #                                        trainable=trainable)(s_batch_norm_2)
-            # s_batch_norm_3 = tf.keras.layers.BatchNormalization(name='state_batch_norm3', trainable=trainable)(
-            #     s_layer_3)
-
             s_flatten = tf.keras.layers.Flatten(name='state_flatten', trainable=trainable)(s_batch_norm_1)
 
-            c_out = tf.keras.layers.Dense(1, name='c_out', activation=None, trainable=trainable)(s_flatten)
-            return c_out
-        else:
-            backbone = tf.keras.applications.mobilenet_v2.MobileNetV2(include_top=False,
-                                                                      weights=None,
-                                                                      pooling='max',
-                                                                      )
-            for layer in backbone.layers:
-                layer.trainable = trainable
-            x = tf.keras.layers.TimeDistributed(backbone)(state)
-            x = tf.keras.layers.Flatten()(x)
-
-            transition = tf.concat([x, action], axis=1)
-            # q_value = tf.keras.layers.Dense(64, activation='relu')(transition)
-            q_value = tf.keras.layers.Dense(1, trainable=trainable)(transition)
+            y = tf.keras.layers.Dense(128)(action)
+            concat = tf.keras.layers.concatenate([s_flatten, y])
+            q_value = tf.keras.layers.Dense(1, name='c_out', activation=None, trainable=trainable)(concat)
             return q_value
 
     # action-value
@@ -163,27 +141,10 @@ class DDPG:
                                                                   stateful=True, trainable=trainable)
                 x = self.actor_s_layer_1(x)
             s_batch_norm_1 = tf.keras.layers.BatchNormalization(name='state_batch_norm1', trainable=trainable)(x)
-            # s_layer_2 = tf.keras.layers.ConvLSTM2D(32, 3, name='state_layer2', return_sequences=True, stateful=True,
-            #                                        trainable=trainable)(s_batch_norm_1)
-            # s_batch_norm_2 = tf.keras.layers.BatchNormalization(name='state_batch_norm2')(s_layer_2)
-            #
-            # s_layer_3 = tf.keras.layers.ConvLSTM2D(32, 3, name='state_layer3', return_sequences=False, stateful=True,
-            #                                        trainable=trainable)(s_batch_norm_2)
-            # s_batch_norm_3 = tf.keras.layers.BatchNormalization(name='state_batch_norm3')(s_layer_3)
 
             s_flatten = tf.keras.layers.Flatten(name='state_flatten', trainable=trainable)(s_batch_norm_1)
 
             action = tf.keras.layers.Dense(2, name='a_out', activation='tanh', trainable=trainable)(s_flatten)
-            return action
-        else:
-            backbone = tf.keras.applications.mobilenet_v2.MobileNetV2(include_top=False,
-                                                                      weights=None,
-                                                                      pooling='max')
-            for layer in backbone.layers:
-                layer.trainable = trainable
-            x = tf.keras.layers.TimeDistributed(backbone)(state)
-            x = tf.keras.layers.Flatten()(x)
-            action = tf.keras.layers.Dense(2, name='a_out', activation='tanh', trainable=trainable)(x)
             return action
 
     def reset_state(self):

@@ -32,7 +32,7 @@ class Agent:
         self.obs_dim = observation_dim(env.observation_space)
         self.action_max = 1  ### KH: DDPG action bound
         self.action_min = -1  ### KH: DDPG action bound
-        self.model = self.set_model('model/DDPG_POLICY/model_ddpg_10.ckpt')
+        self.model = self.set_model()
         self.replay_buffer = ReplayBuffer(minibatch_size=minibatch_size)
 
     def set_model(self, load_path=None):
@@ -73,7 +73,7 @@ class Agent:
                 else:
                     actor_loss, critic_loss = self.train_agent(obs, acs, [reward], obs_next, done, global_step)
                     with open(os.path.join('log_ddpg','log.txt'), "w") as f:
-                        f.write("[ actor_loss: {}, critic_loss: {}]".format(actor_loss, critic_loss))
+                        f.write("[ actor_loss: {}, critic_loss: {}]\n".format(actor_loss, critic_loss))
 
                     # GUI
                     # self.env.render()
@@ -81,9 +81,9 @@ class Agent:
                     obs = obs_next
                     total_reward += reward
 
-            self.model.reset_state()
+            # self.model.reset_state()
             if episode_num is not 0 and episode_num % 10 == 0:
-                self.model.save('./model/DDPG_POLICY', episode_num)
+                self.model.save('./model/DDPG_ACTION', episode_num)
 
             print("[ target video: {}, train_ep: {}, total reward: {} ]".format(target_video, episode_num,
                                                                                 total_reward))  ### KH: train result
@@ -110,14 +110,15 @@ class Agent:
                 global_step += 1
                 step_in_ep += 1
                 action = self.get_action(obs, global_step, False)
-                print(action)
                 obs_next, reward, done, acs_ = self.env.step()
+                print(action, acs_)
 
                 # GUI
-                self.env.render()
+                # self.env.render()
 
                 obs = obs_next
-                # total_reward += reward
+                if reward is not None:
+                    total_reward += reward
 
             print("[ target_video: {}, test_ep: {}, total reward: {} ]".format(target_video, episode_num,
                                                                                total_reward))  ### KH: test result

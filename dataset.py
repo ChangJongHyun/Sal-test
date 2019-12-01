@@ -120,7 +120,7 @@ class Sal360:
             if np_data[idx][0] == 99.:
                 action = (0, 0)
             else:
-                action = (np_data[idx + 1][1] - np_data[idx][1], np_data[idx + 1][2] - np_data[idx][2])
+                action = (np_data[idx + 1][2] - np_data[idx][2], np_data[idx + 1][1] - np_data[idx][1])
                 action = regular_action(action)
             actions.append(action)
 
